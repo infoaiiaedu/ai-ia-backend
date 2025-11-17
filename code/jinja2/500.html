@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+
+
+
+
+
+
+
+{% block serverSideRendered %}
+
+
+<div data-component="menu">
+    {% for m in menu -%}
+    <a href="{{ m.url }}">{{ m.title }}</a>
+    {% endfor %}
+</div>
+
+
+
+
+
+
+
+
+
+{% endblock %}

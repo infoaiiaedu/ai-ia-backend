@@ -1,0 +1,133 @@
+{% extends "base.html" %} 
+
+{% block script %}
+<script>
+    (() => {
+        const el = document.querySelector(".server-side-rendered");
+        el.remove();
+    })();
+</script>
+{% endblock %} 
+
+
+{% block serverSideRendered %}
+
+<div data-component="menu">
+    {% for m in menu -%}
+        <a href="{{ m.url }}">{{ m.name }}</a>
+        <ul>
+            {% for s in m.subcategories -%}
+                <li><a href="{{ s.url }}">{{ s.name }}</a></li>
+            {% endfor %}
+    {% endfor %}
+</div>
+{% if article is defined and article %}
+<div data-component="article">
+    <h1>{{ article.title }}</h1>
+    {% if article.image %}
+    <img src="{{ article.image.url }}" alt="{{ article.title }}">
+    {% endif %}
+    {% if article.description%}
+    <p>{{ article.description }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{%  if comments %}
+<div data-component="comments">
+    <ul>
+      {% for comment in comments %}
+        <li>
+            <p name="author">{{ comment.author }}</p>
+            <p name="content">{{ comment.content }}</p>
+        </li>
+        </a>
+    {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{%  if block_articles %}
+<div data-component="block-articles">
+    {% for article in block_articles %}
+        <a itemscope href="{{article.url}}">
+            {% if article.image -%}
+                <link itemprop="image" href="/media/{{ article.image.url }}" />
+            {% endif -%}
+            <p>{{ article.title }}</p>
+        </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{%  if news_articles %}
+<div data-component="news-articles">
+    {% for article in news_articles %}
+        <a itemscope href="{{article.url}}">
+            {% if article.image -%}
+                <link itemprop="image" href="/media/{{ article.image.url }}" />
+            {% endif -%}
+            <p>{{ article.title }}</p>
+        </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{%  if related_articles %}
+<div data-component="related-articles">
+    {% for article in related_articles %}
+        <a itemscope href="{{article.url}}">
+            {% if article.image -%}
+                <link itemprop="image" href="/media/{{ article.image.url }}" />
+            {% endif -%}
+            <p>{{ article.title }}</p>
+        </a>
+    {% endfor %}
+    </div>
+{% endif %}
+
+{% if main_slider %}
+<div data-component="main-slider">
+    {% for i in main_slider -%}
+    <a href="{{ i.url }}">{{ i.title }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if subcategory %}
+<div data-component="subcategory">
+    <a href="{{subcategory.url}}">{{subcategory.name}}</a>
+</div>
+{% endif %} 
+
+{% if category %}
+<div data-component="category">
+    <a href="{{category.url}}">{{category.name}}</a>
+</div>
+{% endif %} 
+
+{% if articles %}
+<div data-component="articles">
+    {% for m in articles -%}
+    <a itemscope href="/article/{{ m.id }}-{{  m.alias }}/">
+        {% if m.image -%}
+        <link itemprop="image" href="/media/{{ m.image.url }}" />
+        {% endif -%}
+        <p>{{ m.title }}</p>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if Post %}
+<div data-component="Post">
+    {% if Post.image -%}
+    <link itemprop="image" href="/media/{{ Post.image.url }}" />
+    {% endif -%}
+    <h1>{{ Post.title }}</h1>
+    <div>{{ Post.description }}</div>
+</div>
+{% endif %}
+
+
+{% endblock %}
