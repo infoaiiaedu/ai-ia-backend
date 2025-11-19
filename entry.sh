@@ -8,15 +8,18 @@ until pg_isready -h psql -U postgres; do
 done
 echo "Postgres is ready!"
 
-echo "Collecting static files..."
-python manage.py collectstatic --noinput --clear --no-post-process
-
+# Apply migrations
 echo "Applying migrations..."
 python manage.py migrate --noinput
 
+# Collect static files
+echo "Collecting static files..."
+python manage.py collectstatic --noinput --clear --no-post-process
+
 # Start Gunicorn
 echo "Starting Gunicorn..."
-exec gunicorn --workers 4 --threads=4 \
-    main.wsgi:application \
-    --bind "0.0.0.0:5000" \
-    --timeout 400
+exec gunicorn main.wsgi:application \
+    --bind 0.0.0.0:5000 \
+    --workers 2 \
+    --threads 2 \
+    --log-level info

@@ -1,46 +1,59 @@
-FROM python:3.11-alpine3.19 as builder
+# ============================
+# BUILDER
+# ============================
+FROM python:3.11-alpine3.19 AS builder
 
 WORKDIR /usr/src/app
 
-RUN apk update && apk add --no-cache build-base
+# Build dependencies
+RUN apk add --no-cache build-base \
+    && pip install --upgrade pip
 
-RUN pip install --upgrade pip
-
-COPY ./code/requirements.txt requirements.txt
-
+# Copy requirements and build wheels
+COPY code/requirements.txt requirements.txt
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt
 
-
-# Final Image
+# ============================
+# FINAL IMAGE
+# ============================
 FROM python:3.11-alpine3.19
 
-RUN mkdir -p /app
-
+# Create app user
 RUN addgroup -S app && adduser -S -G app app
 
 ENV HOME=/app
 ENV APP_HOME=/app
-
 WORKDIR $APP_HOME/code
+ENV PYTHONPATH="/app/code"
 
-RUN mkdir -p logs cache
-
-# 🔽 Install ImageMagick, dependencies, and Postgres client
+# Install runtime dependencies
 RUN apk add --no-cache \
+    bash \
+    postgresql-client \
+    netcat-openbsd \
     imagemagick \
     ghostscript \
-    libjpeg-turbo \
-    postgresql-client \
-    bash
+    libjpeg-turbo
 
-# Optional: link magick if needed
-# RUN ln -s /usr/bin/convert /usr/bin/magick
+# Create necessary dirs
+RUN mkdir -p logs cache
 
+# Copy Python wheels and install
 COPY --from=builder /usr/src/app/wheels /wheels
+RUN pip install --upgrade pip \
+    && pip install --no-cache /wheels/*
 
-RUN pip install --upgrade pip
-RUN pip install --no-cache /wheels/*
+# Copy application code
+COPY ./code /app/code
 
-RUN chown -R app:app $APP_HOME
+# Copy entrypoint script
+COPY ./entry.sh /shared/entry.sh
+RUN chmod +x /shared/entry.sh
+
+# Set permissions
+RUN chown -R app:app /app
 
 USER app
+
+# Default command
+CMD ["/bin/sh", "/shared/entry.sh"]

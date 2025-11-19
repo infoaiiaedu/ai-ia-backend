@@ -4,16 +4,13 @@ __pycache__
 *.sqlite3
 *.map
 *.rdb
-*.local
 *.tmp
 .DS_Store
 .env
 .vite
 
-*.local
 *.toml
 !*.example.toml
-
 
 .vscode/
 .idea/
@@ -25,6 +22,5 @@ node_modules/
 cache/
 dist/
 dashboard/
-
 
 config/*

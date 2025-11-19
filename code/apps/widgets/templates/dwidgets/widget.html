@@ -1,0 +1,6 @@
+<div class="django_widget" {% for name, value in widget.attrs.items %}{{name}}="{{value}}" {% endfor %}
+    data-name="{{ widget.name }}">
+
+    <textarea hidden name="{{ widget.name }}" class="vTextField" required />{{ value |safe }}</textarea>
+
+</div>

@@ -5,7 +5,7 @@ from pyconf import BASE_DIR, get_config, get_database
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SITE_NAME = "SPORTALL"
+SITE_NAME = "AI-IA"
 
 STORAGE_DIR = BASE_DIR.parent / "storage"
 
@@ -14,7 +14,7 @@ project_env = env["project"]
 
 SECRET_KEY = project_env["SECRET_KEY"]
 
-DEBUG = project_env.get("DEBUG", False)
+DEBUG = project_env.get("DEBUG", True)
 
 ALLOWED_HOSTS = project_env.get("ALLOWED_HOSTS", [])
 CSRF_TRUSTED_ORIGINS = project_env.get("CSRF_TRUSTED_ORIGINS", [])
@@ -24,8 +24,8 @@ REDIS_URI = project_env.get("REDIS_URI")
 
 AUTH_USER_MODEL = "user.User"
 
-SITE_NAME = "Sportall"
-SITE_LOGO_URL = "/static/img/logo/logo_icon_32x32.png"
+SITE_NAME = "AI-IA"
+# SITE_LOGO_URL = "/static/img/logo/logo_icon_32x32.png"
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "djangoeditorwidgets",
     "apps.core",
     "apps.user",
+    "apps.widgets",
     "corsheaders",
     "admin_auto_filters",
     "django.contrib.sitemaps",
@@ -55,12 +56,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     # "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
-    "main.middlewares.RelaxCOOPMiddleware",
-    # "django.contrib.auth.middleware.RemoteUserMiddleware",
 ]
-
-
-CSP_FRAME_ANCESTORS = ("'self'", "https://sportall.ge", "https://www.sportall.ge")
 
 ROOT_URLCONF = "main.urls"
 
@@ -193,6 +189,9 @@ STATICFILES_DIRS = [
     BASE_DIR / "static_cdn",
 ]
 
+JWT_SECRET_KEY = project_env["SECRET_KEY"]
+JWT_ALGORITHM = "HS256"
+JWT_EXP_DELTA_SECONDS = 3600
 
 WEB_EDITOR_DOWNLOAD = {
     "to": BASE_DIR / "static_cdn",
