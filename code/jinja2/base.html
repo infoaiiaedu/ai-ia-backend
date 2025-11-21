@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="{{ lang_code }}">
+    <head>
+        <script src="/static/fluidplayer/fluidplayer.min.js"></script>
+        <link rel="stylesheet" href="/static/fluidplayer/fluidplayer.css" />
+        
+        <meta charset="UTF-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+        {% if article %}
+            <link rel="canonical" href="https://sportall.ge{{ article.url }}" />
+        {% endif %}
+
+
+
+        <link
+        rel="icon"
+        type="image/svg"
+        href="/static/img/favicon.png"
+        />
+
+        {% if pagetitle -%}
+            <title>{{ pagetitle|safe }}</title>
+        {%- endif %}
+       
+       
+        {% for info in metainfo %}
+            {% if not (info.tag == 'link' and info.rel == 'canonical') %}
+                <{{ info.tag }} {% for key, value in info.items() if key!="tag" %} {{ key }}="{{ value }}" {%- endfor %} />
+            {% endif %}
+        {% endfor %}
+
+    
+
+        {% if customscripts -%}
+            {% for item in customscripts.head%}
+            {{item.body|safe}}
+            {% endfor %}
+        {%- endif %}
+
+        {% for item in manifest.links -%} {{ item.html|safe }} {%- endfor %}
+
+        {% for item in manifest.modules -%} {{ item.html|safe }} {%- endfor %}
+
+        <link rel="stylesheet" href="/static/fonts/fonts.css">
+
+        <script>
+            window.CONST = Object.freeze({
+                media_url: "{{ media_url }}",
+                static_url: "{{ static_url }}",
+                now: "{{ now }}",
+                nowStamp: "{{ now_stamp }}",
+                csrfmiddlewaretoken: "{{ csrf_token }}"
+            })
+        </script>
+
+        <script>
+            (function(h,o,t,j,a,r){
+                h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
+                h._hjSettings={hjid:6444390,hjsv:6};
+                a=o.getElementsByTagName('head')[0];
+                r=o.createElement('script');r.async=1;
+                r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
+                a.appendChild(r);
+            })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');
+        </script>
+
+    </head>
+    <body>
+        {% if customscripts %}
+            {% for item in customscripts.top %}{{ item.body|safe }}{% endfor %}
+        {% endif %}
+
+        <div id="app"></div>
+
+        {% if adscripts -%}
+        {% for item in adscripts%}
+        {{item|safe}}
+        {% endfor %}
+        {%- endif %}
+
+        <div class="server-side-rendered" style="display: none">
+            {% block serverSideRendered %} {% endblock %}
+        </div>
+
+        {% if customscripts -%}
+            {% for item in customscripts.below %}{{ item.body|safe }}{% endfor %}
+        {% endif %}
+
+        {% block script %}
+        {% endblock %}
+    </body>
+</html>

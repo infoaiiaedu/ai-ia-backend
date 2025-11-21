@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+    image: main:1.0
+    container_name: main_app
+    restart: always
+    command: /bin/sh /shared/entry.sh
+    user: "${UID}:${GID}"
+    volumes:
+      - ./code:/app/code
+      - ./storage:/app/storage
+      - ./config:/app/config:ro
+      - .:/shared
+    depends_on:
+      - psql
+      - redis
+      - search
+    networks:
+      - ai_network
+    ports:
+      - "5000:5000"
+
+  redis:
+    image: redis:7.2.4-alpine3.19
+    container_name: ai_redis
+    restart: always
+    command: ["redis-server", "/docker/redis/redis.conf"]
+    volumes:
+      - redis-data:/data
+      - ./docker/redis/redis.conf:/docker/redis/redis.conf
+    networks:
+      - ai_network
+
+  psql:
+    image: postgres:16-alpine
+    container_name: ai_psql
+    restart: always
+    environment:
+      POSTGRES_DB: ai_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./storage/db/pgdata:/var/lib/postgresql/data
+    networks:
+      - ai_network
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: ai_nginx
+    ports:
+      - "${PORT}:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./storage:/app/storage:ro
+    depends_on:
+      - app
+    networks:
+      - ai_network
+
+  search:
+    image: getmeili/meilisearch:v1.1
+    container_name: ai-search
+    restart: always
+    volumes:
+      - ./storage/ai_search:/meili_data
+    networks:
+      - ai_network
+
+volumes:
+  redis-data:
+
+networks:
+  ai_network:
