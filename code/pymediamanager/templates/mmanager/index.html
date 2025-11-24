@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="{{lang_code}}">
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, user-scalable=yes, initial-scale=1, height=device-height"
+        />
+
+        <meta name="media-url" content="{{ media_url }}" />
+        <meta name="thumb-url" content="{{ thumb_url }}" />
+
+        <link
+            rel="icon"
+            type="image/png"
+            href="/static/mmanager/img/favicon.png"
+        />
+        <meta name="robots" content="noindex, nofollow" />
+        <title>მედია მენეჯერი</title>
+
+        <link rel="stylesheet" href="/static/mmanager/build/app.css?{{hash}}" />
+    </head>
+
+    <body>
+        <div id="app"></div>
+
+        <script src="/static/mmanager/build/app.js?{{hash}}"></script>
+        <script src="/static/mmanager/utils.js?{{hash}}"></script>
+
+        <script>
+            window.addEventListener("export-files", (e) => {
+                if (Array.isArray(e.detail) && e.detail.length > 0) {
+                    const convert = (f) => JSON.parse(JSON.stringify(f));
+
+                    let files = e.detail.map((f) => convert(f));
+
+                    postMessage({
+                        msg: "insert-file",
+                        files: files,
+                    });
+                }
+            });
+        </script>
+    </body>
+</html>

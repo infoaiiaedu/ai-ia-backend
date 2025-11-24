@@ -20,8 +20,7 @@ class GradeAdmin(admin.ModelAdmin):
 @admin.register(Topic)
 class TopicAdmin(admin.ModelAdmin):
     form = TopicForm
-    list_display = ('name', 'subject')
-    list_filter = ('subject',)
-    search_fields = ('name', 'subject__name')
-    ordering = ('subject', 'name')
-    autocomplete_fields = ['subject', 'grade']
+    list_display = ['name', 'grade']
+    search_fields = ['name', 'grade']
+    ordering = ['name']
+    autocomplete_fields = ['grade']

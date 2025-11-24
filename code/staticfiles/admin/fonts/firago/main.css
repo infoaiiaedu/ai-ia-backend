@@ -1,0 +1,17 @@
+@font-face {
+    font-family: "FiraGO Book";
+    src: url(./FiraGO-Book-geo.ttf);
+}
+
+label,
+a,
+p,
+.breadcrumbs,
+ul,
+h3 {
+    font-family: "FiraGO Book";
+}
+
+.monaco-editor--conteiner {
+    font-family: "Droid Sans Mono", "monospace", monospace;
+}

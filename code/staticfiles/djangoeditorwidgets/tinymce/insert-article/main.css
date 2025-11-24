@@ -1,0 +1,17 @@
+.article_attach {
+    outline: red;
+    outline-style: dashed;
+    outline-offset: 2px;
+
+    display: flex;
+    flex-direction: row;
+
+    gap: 25px;
+    align-items: center;
+}
+
+.article_attach img {
+    width: 200px;
+    height: 150px;
+    object-fit: cover;
+}

@@ -39,6 +39,8 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.user",
     "apps.widgets",
+    "apps.payments",
+    "pymediamanager",
     "corsheaders",
     "admin_auto_filters",
     "django.contrib.sitemaps",
@@ -112,6 +114,20 @@ CACHES = {
     },
 }
 
+SITE_URL = "https://cinereous-pesteringly-tomi.ngrok-free.dev"
+
+BOG_CLIENT_ID = "10002602"
+BOG_CLIENT_SECRET = "rQM9AuwC3T8P"
+
+USE_BOG_MOCK = False
+
+BOG_OAUTH_TOKEN_URL = "https://oauth2.bog.ge/auth/realms/bog/protocol/openid-connect/token"
+BOG_API_BASE = "https://api.bog.ge/payments/v1"
+
+BOG_CLIENT_INN = "440897317"
+BOG_MERCHANT_NAME = "EDUAIIA.COM"
+BOG_MERCHANT_ID = "0000000098129NF"
+BOG_TERMINAL_ID = "POS382XZ"
 
 WSGI_APPLICATION = "main.wsgi.application"
 

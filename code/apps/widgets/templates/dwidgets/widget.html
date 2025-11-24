@@ -1,6 +1,10 @@
 <div class="django_widget" {% for name, value in widget.attrs.items %}{{name}}="{{value}}" {% endfor %}
     data-name="{{ widget.name }}">
 
-    <textarea hidden name="{{ widget.name }}" class="vTextField" required />{{ value |safe }}</textarea>
-
+    <textarea hidden name="{{ widget.name }}" class="vTextField" required>{{ value |safe }}</textarea>
 </div>
+
+<script>
+    window.MEDIA_MANAGER_URL = "{{ widget.attrs.media_manager_url|default:'/admin/mmanager/' }}";
+</script>
+

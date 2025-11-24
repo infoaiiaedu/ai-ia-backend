@@ -1,0 +1,8 @@
+.palettepq_container {
+    border: 1px dashed #aaa;
+    padding: 5px;
+}
+.palettepq_container::before {
+    content: "myquiz: " attr(data-palettepq);
+    color: orange;
+}

@@ -1,4 +1,4 @@
-<script>
+<!-- <script>
     export let name;
     export let value;
 
@@ -86,4 +86,4 @@
     {/if}
 
     <textarea hidden {name} value={widgetValue} />
-</div>
+</div> -->

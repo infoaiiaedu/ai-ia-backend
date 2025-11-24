@@ -1,7 +1,6 @@
 class MManager {
     constructor({
         media_manager_url,
-        // media_manager_token,
         width = 1000,
         height = 640,
         active = false,
@@ -9,16 +8,13 @@ class MManager {
     }) {
         this.self_url = window.location.protocol + "//" + window.location.host;
         this.media_manager_url = media_manager_url;
-        // this.media_manager_token = media_manager_token;
 
         this.active = active;
-
         this.width = width;
         this.height = height;
 
         this.win = null;
         this.callback = null;
-
         this.autoclose = autoclose;
 
         this._connected = false;
@@ -26,13 +22,11 @@ class MManager {
         this.url = [
             this.media_manager_url,
             `?opener_origin=${this.self_url}`,
-            // `&token=${this.media_manager_token}`,
         ].join("");
     }
 
     open() {
         this.active = true;
-
         this.win = window.open(
             this.url,
             "Media Manager",
@@ -42,9 +36,7 @@ class MManager {
 
     close() {
         this.active = false;
-
-        !!this.win && this.win.close();
-
+        if (this.win) this.win.close();
         this.win = null;
         this.callback = null;
     }
@@ -62,51 +54,32 @@ class MManager {
     }
 
     postMessage(data) {
-        !!this.win &&
+        if (this.win) {
             this.win.postMessage(
-                {
-                    action: "mediamanager",
-                    ...data,
-                },
+                { action: "mediamanager", ...data },
                 this.media_manager_url
             );
+        }
     }
 
     insertFile(detail) {
-        if (!this.connected) {
-            return false;
-        }
+        if (!this.connected) return false;
 
-        if ("files" in detail) {
-            detail = detail.files[0];
-        }
+        if ("files" in detail) detail = detail.files[0];
 
         const url = ("/media/" + detail.path).replace("//", "/");
 
         if (this.callback) {
             this.callback(url, { alt: detail.name || "" });
-            this.autoclose && this.close();
-        } else {
-            let ed = tinymce.activeEditor;
-            let range = ed.selection.getRng();
-            let img = ed.getDoc().createElement("img");
-            img.alt = detail.name;
-            img.src = url;
-            img.width = 825;
-            range.insertNode(img);
+            if (this.autoclose) this.close();
         }
     }
 
     eventListener(event) {
-        if (!this.active) {
-            return false;
-        }
+        if (!this.active) return false;
 
-        let data = event.data;
-
-        if (data.action !== "mediamanager") {
-            return false;
-        }
+        const data = event.data;
+        if (data.action !== "mediamanager") return false;
 
         if (data.msg === "connected") {
             this.connected = true;
