@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 #!/bin/sh
+=======
+﻿#!/bin/sh
+>>>>>>> 582c3dc12a9409382079981e07f3d17f362746f3
 set -e
 
 # Wait for Postgres

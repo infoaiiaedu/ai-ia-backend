@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 <!-- <script>
+=======
+<script>
+>>>>>>> 582c3dc12a9409382079981e07f3d17f362746f3
     export let name;
     export let value;
 
@@ -86,4 +90,8 @@
     {/if}
 
     <textarea hidden {name} value={widgetValue} />
+<<<<<<< HEAD
 </div> -->
+=======
+</div>
+>>>>>>> 582c3dc12a9409382079981e07f3d17f362746f3

@@ -51,6 +51,10 @@ class Parent(models.Model):
         access_token = jwt.encode(access_payload, settings.SECRET_KEY, algorithm="HS256")
         refresh_token = jwt.encode(refresh_payload, settings.SECRET_KEY, algorithm="HS256")
 
+<<<<<<< HEAD
+=======
+        # Save refresh token in separate model
+>>>>>>> 582c3dc12a9409382079981e07f3d17f362746f3
         ParentRefreshToken.objects.create(
             parent=self,
             token=refresh_token,
@@ -68,8 +72,13 @@ class Parent(models.Model):
 
 
 class Child(models.Model):
+<<<<<<< HEAD
     parent = models.ForeignKey(Parent, on_delete=models.CASCADE, related_name='children', verbose_name="მშობელი")
     name = models.CharField(max_length=100, verbose_name="სახელი და გვარი")
+=======
+    parent = models.ForeignKey(Parent, on_delete=models.CASCADE, related_name='children')
+    name = models.CharField(max_length=100)
+>>>>>>> 582c3dc12a9409382079981e07f3d17f362746f3
     grade = models.PositiveIntegerField("კლასი")
     otp_code = models.CharField(max_length=6, blank=True, null=True)
     otp_expiry = models.DateTimeField(blank=True, null=True)

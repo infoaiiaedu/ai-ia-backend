@@ -39,8 +39,11 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.user",
     "apps.widgets",
+<<<<<<< HEAD
     "apps.payments",
     "pymediamanager",
+=======
+>>>>>>> 582c3dc12a9409382079981e07f3d17f362746f3
     "corsheaders",
     "admin_auto_filters",
     "django.contrib.sitemaps",
@@ -114,6 +117,7 @@ CACHES = {
     },
 }
 
+<<<<<<< HEAD
 SITE_URL = "https://cinereous-pesteringly-tomi.ngrok-free.dev"
 
 BOG_CLIENT_ID = "10002602"
@@ -128,6 +132,8 @@ BOG_CLIENT_INN = "440897317"
 BOG_MERCHANT_NAME = "EDUAIIA.COM"
 BOG_MERCHANT_ID = "0000000098129NF"
 BOG_TERMINAL_ID = "POS382XZ"
+=======
+>>>>>>> 582c3dc12a9409382079981e07f3d17f362746f3
 
 WSGI_APPLICATION = "main.wsgi.application"
 
