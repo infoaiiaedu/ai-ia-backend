@@ -134,3 +134,34 @@ def bog_callback(request, payload: BOGCallbackPayload):
         logger.warning("Callback for unknown order_id: %s", order_id)
 
     return {"received": True}
+
+
+@router.post("/simulate-renew/")
+async def simulate_renew():
+    """
+    Trigger recurring payment for expired subscriptions.
+    Can be called from API/docs for testing.
+    """
+    client = BOGClient()
+    now = timezone.now()
+    subs = Subscription.objects.filter(active=True, end_date__lte=now)
+
+    results = []
+
+    for sub in subs:
+        try:
+            response = await client.recurrent_charge(
+                parent_order_id=sub.order.parent_order_id,
+                amount=sub.order.total_amount,
+                callback_url=f"{SITE_URL}/api/payments/callback/"
+            )
+            # extend subscription by 30 days
+            sub.end_date += timedelta(days=30)
+            sub.save(update_fields=["end_date"])
+            results.append({"subscription_id": sub.id, "status": "SUCCESS"})
+        except Exception as e:
+            sub.active = False
+            sub.save(update_fields=["active"])
+            results.append({"subscription_id": sub.id, "status": "FAILED", "error": str(e)})
+
+    return {"processed": len(results), "results": results}
