@@ -56,7 +56,7 @@ create_backup() {
     
     BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).tar.gz"
     log "Creating backup: $BACKUP_FILE"
-    tar -czf "$BACKUP_FILE" \
+    tar -cf "$BACKUP_FILE" \
         --exclude='.git' \
         --exclude='__pycache__' \
         --exclude='*.pyc' \
