@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-<!-- <script>
-=======
 <script>
->>>>>>> 582c3dc12a9409382079981e07f3d17f362746f3
     export let name;
     export let value;
 
@@ -50,17 +46,12 @@
                 .reduce((s, t, i) => (s += Number(t) * 60 ** i), 0);
 
             let el = document.querySelector("#id_duration");
-
-            if (el) {
-                el.value = duration;
-            }
+            if (el) el.value = duration;
 
             let vid_source_host = "https://video.ambebi.ge/";
-
             let base_url = vid_source_host + detail.url.replace("//", "/");
 
             let video_url = base_url + ".mp3";
-
             vidValue = video_url;
         };
         vm.open();
@@ -90,8 +81,4 @@
     {/if}
 
     <textarea hidden {name} value={widgetValue} />
-<<<<<<< HEAD
-</div> -->
-=======
 </div>
->>>>>>> 582c3dc12a9409382079981e07f3d17f362746f3

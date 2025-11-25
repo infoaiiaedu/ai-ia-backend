@@ -39,14 +39,12 @@
 
     const onImageLoad = () => {
         valid = true;
-
         rectElement.style.width = imgElement.width + "px";
         rectElement.style.height = imgElement.height + "px";
     };
 
     const changePoint = (e) => {
         const rect = rectElement.getBoundingClientRect();
-
         point.x = Math.floor((100 * (e.clientX - rect.left)) / rect.width);
         point.y = Math.floor((100 * (e.clientY - rect.top)) / rect.height);
     };
@@ -85,6 +83,7 @@
             id={"id_" + name}
             bind:value={inpValue}
         />
+        <!-- Only this button remains -->
         <input
             class="{prefix}-btn"
             type="button"
