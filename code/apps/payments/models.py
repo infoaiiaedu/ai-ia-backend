@@ -7,6 +7,7 @@ class Order(models.Model):
     user = models.ForeignKey("user.Parent", on_delete=models.CASCADE, null=True, blank=True, verbose_name="მომხმარებელი")
     external_id = models.CharField(max_length=100, unique=True, default="DUMMY_EXTERNAL_ID", verbose_name="გარე ID")
     bog_id = models.CharField(max_length=100, default="DUMMY_BOG_ID", verbose_name="BOG ID")
+    parent_order_id = models.CharField(max_length=100, null=True, blank=True, verbose_name="მშობელი შეკვეთის ID")
     total_amount = models.FloatField(verbose_name="თანხა")
     status = models.CharField(
         max_length=50,
