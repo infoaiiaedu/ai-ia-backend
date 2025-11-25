@@ -139,11 +139,15 @@ def bog_callback(request, payload: BOGCallbackPayload):
 async def simulate_renew(request):
     """
     Trigger recurring payment for all expired subscriptions.
-    No auth required. Only use for testing!
+    No auth required. Only use temporarily for testing!
     """
     client = BOGClient()
     now = timezone.now()
-    subs = Subscription.objects.filter(active=True, end_date__lte=now)
+
+    # Fetch expired subscriptions in a thread-safe way
+    subs = await sync_to_async(list)(
+        Subscription.objects.filter(active=True, end_date__lte=now)
+    )
 
     results = []
 
@@ -156,18 +160,17 @@ async def simulate_renew(request):
                 callback_url=f"{SITE_URL}/api/payments/callback/"
             )
 
-            # If charge succeeds, extend subscription
+            # Extend subscription
             sub.end_date += timedelta(days=30)
-            sub.save(update_fields=["end_date"])
+            await sync_to_async(sub.save)(update_fields=["end_date"])
 
             results.append({
                 "subscription_id": sub.id,
                 "status": "SUCCESS",
             })
         except Exception as e:
-            # Mark inactive if charge failed
             sub.active = False
-            sub.save(update_fields=["active"])
+            await sync_to_async(sub.save)(update_fields=["active"])
             results.append({
                 "subscription_id": sub.id,
                 "status": "FAILED",
