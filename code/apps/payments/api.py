@@ -153,14 +153,13 @@ async def simulate_renew(request):
 
     for sub in subs:
         try:
-            # Call BOG recurrent charge using saved card
-            response = await client.recurrent_charge(
+            # If recurrent_charge is synchronous, wrap it
+            response = await sync_to_async(client.recurrent_charge)(
                 parent_order_id=sub.order.parent_order_id,
                 amount=sub.order.total_amount,
                 callback_url=f"{SITE_URL}/api/payments/callback/"
             )
 
-            # Extend subscription
             sub.end_date += timedelta(days=30)
             await sync_to_async(sub.save)(update_fields=["end_date"])
 
@@ -177,4 +176,3 @@ async def simulate_renew(request):
                 "error": str(e)
             })
 
-    return {"processed": len(results), "results": results}
