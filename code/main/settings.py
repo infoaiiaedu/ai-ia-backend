@@ -115,6 +115,7 @@ CACHES = {
 }
 
 SITE_URL = "https://eduaiia.com"
+# SITE_URL = "https://cinereous-pesteringly-tomi.ngrok-free.dev"
 
 BOG_CLIENT_ID = "10002602"
 BOG_CLIENT_SECRET = "rQM9AuwC3T8P"

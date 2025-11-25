@@ -1,13 +1,9 @@
 import uuid
 import time
-import hmac
-import hashlib
 import logging
-from decimal import Decimal
 
 import httpx
 from ninja import Router
-from ninja.errors import HttpError
 from ninja.security import HttpBearer
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
@@ -25,7 +21,6 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 USE_BOG_MOCK = getattr(settings, "USE_BOG_MOCK", True)
-CALLBACK_SECRET = getattr(settings, "BOG_CALLBACK_SECRET", None)
 
 
 class AuthBearer(HttpBearer):
@@ -33,12 +28,16 @@ class AuthBearer(HttpBearer):
         account, ok = await sync_to_async(decode_jwt_token)(token)
         return account if ok else None
 
+
 @router.post("/create-order/", auth=AuthBearer())
 async def create_order(request, payload: CreateOrderRequest):
     parent = request.auth
     subject = await sync_to_async(Subject.objects.get)(id=payload.subject_id)
 
-    # Use BOG mock
+    price = float(subject.price)
+    if price <= 0:
+        raise ValueError("Subject price must be > 0")
+
     if USE_BOG_MOCK:
         bog_id = f"TEST_ORDER_{subject.id}_{int(time.time())}"
         redirect_url = "https://bog.ge/test_redirect"
@@ -46,7 +45,7 @@ async def create_order(request, payload: CreateOrderRequest):
             user=parent,
             external_id=payload.external_order_id,
             bog_id=bog_id,
-            total_amount=float(subject.price),
+            total_amount=price,
             status="PENDING",
             redirect_url=redirect_url,
             subject=subject
@@ -55,20 +54,23 @@ async def create_order(request, payload: CreateOrderRequest):
         bog = BOGClient()
         token = await bog.get_access_token()
 
+        external_order_id = f"{payload.external_order_id}_{int(time.time())}"
+        ttl_minutes = payload.ttl if payload.ttl and payload.ttl >= 2 else 15
+
         body = {
             "callback_url": payload.callback_url,
-            "external_order_id": payload.external_order_id,
-            "ttl": payload.ttl,
-            "application_type": payload.application_type,
-            "payment_method": [payload.payment_method],  
+            "external_order_id": external_order_id,
+            "ttl": ttl_minutes,
+            "application_type": payload.application_type.lower(),
+            "payment_method": [payload.payment_method.lower()],
             "purchase_units": {
                 "currency": "GEL",
-                "total_amount": float(subject.price),
+                "total_amount": price,
                 "basket": [
                     {
                         "product_id": str(subject.id),
                         "quantity": 1,
-                        "unit_price": float(subject.price)
+                        "unit_price": price
                     }
                 ]
             },
@@ -84,12 +86,15 @@ async def create_order(request, payload: CreateOrderRequest):
             "Idempotency-Key": str(uuid.uuid4())
         }
 
+        logger.info("BOG create_order request body: %s", body)
+
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{settings.BOG_API_BASE}/ecommerce/orders",
                 json=body,
                 headers=headers
             )
+
             if resp.status_code >= 400:
                 logger.error("BOG create_order error %s: %s", resp.status_code, resp.text)
             resp.raise_for_status()
@@ -100,9 +105,9 @@ async def create_order(request, payload: CreateOrderRequest):
 
         await sync_to_async(Order.objects.create)(
             user=parent,
-            external_id=payload.external_order_id,
+            external_id=external_order_id,
             bog_id=bog_id,
-            total_amount=float(subject.price),
+            total_amount=price,
             status="PENDING",
             redirect_url=redirect_url,
             subject=subject
@@ -113,24 +118,24 @@ async def create_order(request, payload: CreateOrderRequest):
         "redirect_url": redirect_url,
         "status": "PENDING"
     }
-    
-    
+
+
 @router.post("/callback/")
 @csrf_exempt
 def bog_callback(request, payload: BOGCallbackPayload):
     try:
         order_id = payload.body.order_id
-        status_key = payload.body.order_status.key
+        status_key = payload.body.order_status.key.upper()
 
         with transaction.atomic():
             order = Order.objects.select_for_update().get(bog_id=order_id)
 
-            if status_key.upper() in ("COMPLETED", "REFUNDED", "REFUNDED_PARTIALLY"):
+            if status_key in ("COMPLETED", "REFUNDED", "REFUNDED_PARTIALLY"):
                 order.status = "SUCCESS"
-            elif status_key.upper() in ("REJECTED", "ERROR"):
+            elif status_key in ("REJECTED", "ERROR"):
                 order.status = "FAILED"
             else:
-                order.status = status_key.upper()
+                order.status = status_key
 
             order.save(update_fields=["status"])
 
@@ -143,5 +148,5 @@ def bog_callback(request, payload: BOGCallbackPayload):
 
     except Order.DoesNotExist:
         logger.warning("Callback for unknown order_id: %s", payload.body.order_id)
-    return {"received": True}
 
+    return {"received": True}
