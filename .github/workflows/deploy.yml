@@ -134,7 +134,12 @@ jobs:
           
           # Execute deployment script on server
           echo "🚀 Executing deployment script on server..."
-          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && bash scripts/deploy.sh"
+          ssh -i ~/.ssh/deploy_key \
+             -o ServerAliveInterval=30 \
+             -o ServerAliveCountMax=10 \
+             "$DEPLOY_USER@$DEPLOY_HOST" \
+             "cd $DEPLOY_PATH && bash scripts/deploy.sh"
+
 
       - name: Verify deployment
         if: always()
