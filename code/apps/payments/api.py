@@ -135,12 +135,11 @@ def bog_callback(request, payload: BOGCallbackPayload):
 
     return {"received": True}
 
-
 @router.post("/simulate-renew/")
-async def simulate_renew():
+async def simulate_renew(request):
     """
-    Trigger recurring payment for expired subscriptions.
-    Can be called from API/docs for testing.
+    Trigger recurring payment for all expired subscriptions.
+    No auth required. Only use for testing!
     """
     client = BOGClient()
     now = timezone.now()
@@ -150,18 +149,29 @@ async def simulate_renew():
 
     for sub in subs:
         try:
+            # Call BOG recurrent charge using saved card
             response = await client.recurrent_charge(
                 parent_order_id=sub.order.parent_order_id,
                 amount=sub.order.total_amount,
                 callback_url=f"{SITE_URL}/api/payments/callback/"
             )
-            # extend subscription by 30 days
+
+            # If charge succeeds, extend subscription
             sub.end_date += timedelta(days=30)
             sub.save(update_fields=["end_date"])
-            results.append({"subscription_id": sub.id, "status": "SUCCESS"})
+
+            results.append({
+                "subscription_id": sub.id,
+                "status": "SUCCESS",
+            })
         except Exception as e:
+            # Mark inactive if charge failed
             sub.active = False
             sub.save(update_fields=["active"])
-            results.append({"subscription_id": sub.id, "status": "FAILED", "error": str(e)})
+            results.append({
+                "subscription_id": sub.id,
+                "status": "FAILED",
+                "error": str(e)
+            })
 
     return {"processed": len(results), "results": results}
