@@ -109,6 +109,10 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          MAX_DEPLOY_LOGS: "10"
+          MAX_DEPLOY_BACKUPS: "3"
+          MIN_FREE_SPACE_KB: "1572864" # ~1.5GB
+          DISABLE_DEPLOY_BACKUP: "1"
         run: |
           # Verify all secrets are set
           if [ -z "$DEPLOY_KEY" ] || [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_PATH" ]; then
@@ -126,7 +130,8 @@ jobs:
           
           # Check SSH connection
           echo "🔍 Testing SSH connection..."
-          if ! ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 "$DEPLOY_USER@$DEPLOY_HOST" "echo OK" > /dev/null 2>&1; then
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=6 -o ConnectTimeout=10 -o ConnectionAttempts=5 -o StrictHostKeyChecking=accept-new"
+          if ! ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "echo OK" > /dev/null 2>&1; then
             echo "❌ SSH connection failed. Check DEPLOY_HOST, DEPLOY_USER, and DEPLOY_KEY"
             exit 1
           fi
@@ -134,11 +139,9 @@ jobs:
           
           # Execute deployment script on server
           echo "🚀 Executing deployment script on server..."
-          ssh -i ~/.ssh/deploy_key \
-             -o ServerAliveInterval=30 \
-             -o ServerAliveCountMax=10 \
+          ssh $SSH_OPTS \
              "$DEPLOY_USER@$DEPLOY_HOST" \
-             "cd $DEPLOY_PATH && bash scripts/deploy.sh"
+             "cd $DEPLOY_PATH && MAX_DEPLOY_LOGS=$MAX_DEPLOY_LOGS MAX_DEPLOY_BACKUPS=$MAX_DEPLOY_BACKUPS MIN_FREE_SPACE_KB=$MIN_FREE_SPACE_KB DISABLE_DEPLOY_BACKUP=$DISABLE_DEPLOY_BACKUP bash scripts/deploy.sh"
 
 
       - name: Verify deployment
@@ -156,8 +159,9 @@ jobs:
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           
           echo "📊 Final container status:"
-          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && docker-compose ps" || true
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=6 -o ConnectTimeout=10 -o ConnectionAttempts=5 -o StrictHostKeyChecking=accept-new"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && docker-compose ps" || true
           
           echo ""
           echo "📝 Recent deployment logs:"
-          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && tail -50 logs/deployment_*.log | tail -50" || true
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && tail -50 logs/deployment_*.log | tail -50" || true

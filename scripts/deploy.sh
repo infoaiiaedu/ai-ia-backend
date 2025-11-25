@@ -10,10 +10,15 @@ set -e
 # Configuration
 # ============================
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_FILE="${PROJECT_DIR}/logs/deployment_$(date +%Y%m%d_%H%M%S).log"
+LOG_DIR="${PROJECT_DIR}/logs"
+LOG_FILE="${LOG_DIR}/deployment_$(date +%Y%m%d_%H%M%S).log"
 BACKUP_DIR="${PROJECT_DIR}/.backups"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 DOCKER_COMPOSE_FILE="${PROJECT_DIR}/docker-compose.yml"
+MAX_LOGS="${MAX_DEPLOY_LOGS:-10}"
+MAX_BACKUPS="${MAX_DEPLOY_BACKUPS:-3}"
+MIN_FREE_SPACE_KB="${MIN_FREE_SPACE_KB:-1048576}" # ~1GB default floor
+DISABLE_DEPLOY_BACKUP="${DISABLE_DEPLOY_BACKUP:-0}"
 
 # Color output
 RED='\033[0;31m'
@@ -48,22 +53,43 @@ fail() {
     exit 1
 }
 
-# Create backup
-create_backup() {
-    if [ ! -d "$BACKUP_DIR" ]; then
-        mkdir -p "$BACKUP_DIR"
+# Rotate and limit logs
+rotate_logs() {
+    if [ -d "$LOG_DIR" ] && compgen -G "$LOG_DIR/deployment_*.log" > /dev/null; then
+        ls -1t "$LOG_DIR"/deployment_*.log | tail -n +$((MAX_LOGS + 1)) | xargs -r rm -- 2>/dev/null || true
     fi
-    
+}
+
+# Rotate and limit backups
+rotate_backups() {
+    if [ -d "$BACKUP_DIR" ] && compgen -G "$BACKUP_DIR/backup_*.tar.gz" > /dev/null; then
+        ls -1t "$BACKUP_DIR"/backup_*.tar.gz | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -- 2>/dev/null || true
+    fi
+}
+
+# Create lightweight backup (config + infra only)
+create_backup() {
+    if [ "$DISABLE_DEPLOY_BACKUP" = "1" ] || [ "$DISABLE_DEPLOY_BACKUP" = "true" ]; then
+        warn "Backups disabled via DISABLE_DEPLOY_BACKUP; skipping snapshot."
+        rotate_backups
+        return
+    fi
+
+    mkdir -p "$BACKUP_DIR"
     BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).tar.gz"
-    log "Creating backup: $BACKUP_FILE"
-    tar -cf "$BACKUP_FILE" \
-        --exclude='.git' \
-        --exclude='__pycache__' \
-        --exclude='*.pyc' \
-        --exclude='storage/db' \
-        -C "$(dirname "$PROJECT_DIR")" \
-        "$(basename "$PROJECT_DIR")" 2>/dev/null || warn "Backup creation had minor issues"
-    success "Backup created"
+    log "Creating lightweight backup: $BACKUP_FILE"
+    if tar -czf "$BACKUP_FILE" --ignore-failed-read \
+        -C "$PROJECT_DIR" \
+        config/project.toml \
+        docker-compose.yml \
+        Dockerfile \
+        docker \
+        scripts/deploy.sh; then
+        success "Backup created"
+    else
+        warn "Backup creation encountered issues (continuing)"
+    fi
+    rotate_backups
 }
 
 # Check disk space
@@ -71,15 +97,14 @@ check_disk_space() {
     log "Checking available disk space..."
     
     AVAILABLE_SPACE=$(df "$PROJECT_DIR" | awk 'NR==2 {print $4}')
-    REQUIRED_SPACE=$((2000000)) # ~2GB in KB
     
-    if [ "$AVAILABLE_SPACE" -lt "$REQUIRED_SPACE" ]; then
-        error "Insufficient disk space. Available: $(numfmt --to=iec $((AVAILABLE_SPACE * 1024)) 2>/dev/null || echo "${AVAILABLE_SPACE}KB"), Required: ~2GB"
+    if [ "$AVAILABLE_SPACE" -lt "$MIN_FREE_SPACE_KB" ]; then
+        error "Insufficient disk space. Available: $(numfmt --to=iec $((AVAILABLE_SPACE * 1024)) 2>/dev/null || echo "${AVAILABLE_SPACE}KB"), Required: $(numfmt --to=iec $((MIN_FREE_SPACE_KB * 1024)) 2>/dev/null || echo "${MIN_FREE_SPACE_KB}KB")"
         log "Attempting automatic Docker cleanup..."
         if docker system prune -f --volumes > /dev/null 2>&1; then
             success "Docker cleanup completed"
             AVAILABLE_SPACE=$(df "$PROJECT_DIR" | awk 'NR==2 {print $4}')
-            if [ "$AVAILABLE_SPACE" -lt "$REQUIRED_SPACE" ]; then
+            if [ "$AVAILABLE_SPACE" -lt "$MIN_FREE_SPACE_KB" ]; then
                 fail "Still insufficient disk space after cleanup. Please free up space manually."
             fi
         else
@@ -87,6 +112,16 @@ check_disk_space() {
         fi
     else
         success "Disk space OK ($(numfmt --to=iec $((AVAILABLE_SPACE * 1024)) 2>/dev/null || echo "${AVAILABLE_SPACE}KB") available)"
+    fi
+}
+
+# Proactive Docker cleanup
+docker_garbage_collect() {
+    log "Running proactive Docker cleanup..."
+    if docker system prune -af --volumes > /dev/null 2>&1; then
+        success "Docker cache cleared"
+    else
+        warn "Docker cleanup failed (continuing)"
     fi
 }
 
@@ -207,8 +242,9 @@ echo -e "${YELLOW}║     AI-IA Backend Deployment Script    ║${NC}"
 echo -e "${YELLOW}╚════════════════════════════════════════╝${NC}"
 echo ""
 
-# Create logs directory
-mkdir -p "${PROJECT_DIR}/logs"
+# Create logs directory & rotate previous files to avoid tee failures
+mkdir -p "$LOG_DIR"
+rotate_logs
 
 log "Deployment started"
 log "Project directory: $PROJECT_DIR"
@@ -220,6 +256,9 @@ verify_prerequisites
 
 # Check disk space
 check_disk_space
+
+# Preemptive Docker cleanup keeps disk usage low even when space is OK
+docker_garbage_collect
 
 # Check port availability
 check_port_available 5000
@@ -388,10 +427,6 @@ done
 log ""
 log "Final container status:"
 docker-compose -f "$DOCKER_COMPOSE_FILE" ps | tee -a "$LOG_FILE"
-
-# Clean up old backups (keep last 5)
-log "Cleaning up old backups (keeping last 5)..."
-ls -t "$BACKUP_DIR"/backup_*.tar.gz 2>/dev/null | tail -n +6 | xargs -r rm 2>/dev/null || true
 
 # Final summary
 if [ "$CONTAINERS_OK" = true ]; then
