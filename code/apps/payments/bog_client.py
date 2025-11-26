@@ -34,6 +34,7 @@ class BOGClient:
 
     async def recurrent_charge(self, parent_order_id: str, amount: float, callback_url: str):
         token = await self.get_access_token()
+
         body = {
             "callback_url": callback_url,
             "purchase_units": {
@@ -41,16 +42,19 @@ class BOGClient:
                 "total_amount": amount
             }
         }
+
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Idempotency-Key": str(uuid.uuid4())
         }
+
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"{settings.BOG_API_BASE}/ecommerce/orders/{parent_order_id}",
+                f"{settings.BOG_API_BASE}/ecommerce/orders/{parent_order_id}/recurrent",
                 json=body,
                 headers=headers
             )
             resp.raise_for_status()
             return resp.json()
+

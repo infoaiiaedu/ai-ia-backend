@@ -1,32 +1,35 @@
+# management/commands/renew_subscriptions.py
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from datetime import timedelta
 from apps.payments.models import Subscription
 from apps.payments.bog_client import BOGClient
 import asyncio
+import logging
 from main import settings
 
-SITE_URL = settings.SITE_URL
+logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
-    help = "Auto-renew expired subscriptions using BOG saved-card"
+    help = "Renew subscriptions using BOG recurrent payments"
 
-    def handle(self, *args, **options):
-        asyncio.run(self.renew_subscriptions())
+    def handle(self, *args, **kwargs):
+        subs = Subscription.objects.filter(end_date__lte=timezone.now(), active=True)
+        bog = BOGClient()
+        results = []
 
-    async def renew_subscriptions(self):
-        client = BOGClient()
-        now = timezone.now()
-        subs = Subscription.objects.filter(active=True, end_date__lte=now)
         for sub in subs:
             try:
-                await client.recurrent_charge(
-                    parent_order_id=sub.order.parent_order_id,
-                    amount=sub.order.total_amount,
-                    callback_url=f"{SITE_URL}/api/payments/callback/"
+                asyncio.run(
+                    bog.recurrent_charge(
+                        parent_order_id=sub.order.parent_order_id,
+                        amount=sub.order.total_amount,
+                        callback_url=f"{settings.SITE_URL}/api/payments/callback/"
+                    )
                 )
-                sub.end_date += timedelta(days=30)
-                sub.save(update_fields=["end_date"])
+                results.append({"subscription_id": sub.id, "status": "CHARGED"})
+                logger.info(f"Subscription {sub.id} recurrent charge triggered.")
             except Exception as e:
-                sub.active = False
-                sub.save(update_fields=["active"])
+                results.append({"subscription_id": sub.id, "status": "FAILED", "error": str(e)})
+                logger.error(f"Subscription {sub.id} recurrent charge failed: {str(e)}")
+        
+        self.stdout.write(self.style.SUCCESS(f"Processed {len(results)} subscriptions"))

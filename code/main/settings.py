@@ -132,38 +132,42 @@ BOG_TERMINAL_ID = "POS382XZ"
 
 WSGI_APPLICATION = "main.wsgi.application"
 
-# if DEBUG:
-#     import sys
-#     LOGGING = {
-#         "version": 1,
-#         "disable_existing_loggers": False,
-#         "formatters": {
-#             "verbose": {
-#                 "format": "[{asctime}] {levelname} {name} - {message}",
-#                 "style": "{",
-#             },
-#         },
-#         "handlers": {
-#             "console": {
-#                 "level": "DEBUG",
-#                 "class": "logging.StreamHandler",
-#                 "stream": sys.stdout,  # explicitly set to stdout
-#                 "formatter": "verbose",
-#             },
-#         },
-#         "loggers": {
-#             "django": {
-#                 "handlers": ["console"],
-#                 "level": "DEBUG",
-#                 "propagate": True,
-#             },
-#         },
-#         "": {
-#             "handlers": ["console"],
-#             "level": "DEBUG",
-#             "propagate": True,
-#         },
-#     }
+import sys
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name} - {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": sys.stdout,
+            "formatter": "verbose",
+        },
+        "payments_file": {
+            "class": "logging.FileHandler",
+            "filename": str(STORAGE_DIR / "payments.log"),
+            "formatter": "verbose",
+            "level": "INFO",
+        },
+    },
+    "loggers": {
+        "apps.payments": {
+            "handlers": ["console", "payments_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+}
 
 
 DATABASES = {"default": get_database(env["database"])}
