@@ -33,7 +33,7 @@ class AuthBearer(HttpBearer):
                 logger.info("Authentication successful for account_id: %s", getattr(account, "id", None))
                 return account
             else:
-                logger.warning("Authentication failed for token: %s", token)
+                logger.warning("Authentication failed For token: %s", token)
                 return None
         except Exception as e:
             logger.error("Authentication error: %s", str(e), exc_info=True)
