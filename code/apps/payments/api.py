@@ -135,44 +135,40 @@ def bog_callback(request, payload: BOGCallbackPayload):
 
     return {"received": True}
 
-@router.post("/simulate-renew/")
-async def simulate_renew(request):
-    """
-    Trigger recurring payment for all expired subscriptions.
-    No auth required. Only use temporarily for testing!
-    """
-    client = BOGClient()
-    now = timezone.now()
+@router.get("/simulate-renew/")
+def simulate_renew(request):
+    from django.db import transaction
+    from apps.payments.models import Subscription
 
-    # Fetch expired subscriptions in a thread-safe way
-    subs = await sync_to_async(list)(
-        Subscription.objects.filter(active=True, end_date__lte=now)
-    )
-
+    processed = 0
     results = []
+
+    # Get all active subscriptions
+    subs = Subscription.objects.filter(is_active=True)
 
     for sub in subs:
         try:
-            # If recurrent_charge is synchronous, wrap it
-            response = await sync_to_async(client.recurrent_charge)(
-                parent_order_id=sub.order.parent_order_id,
-                amount=sub.order.total_amount,
-                callback_url=f"{SITE_URL}/api/payments/callback/"
-            )
+            with transaction.atomic():
+                ok, error = sub.charge_recurring()
 
-            sub.end_date += timedelta(days=30)
-            await sync_to_async(sub.save)(update_fields=["end_date"])
+                results.append({
+                    "subscription_id": sub.id,
+                    "status": "SUCCESS" if ok else "FAILED",
+                    "error": error
+                })
 
-            results.append({
-                "subscription_id": sub.id,
-                "status": "SUCCESS",
-            })
+                processed += 1
+
         except Exception as e:
-            sub.active = False
-            await sync_to_async(sub.save)(update_fields=["active"])
             results.append({
                 "subscription_id": sub.id,
                 "status": "FAILED",
                 "error": str(e)
             })
+
+    return {
+        "processed": processed,
+        "results": results
+    }
+
 
