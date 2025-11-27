@@ -371,6 +371,113 @@ fi
 success "Static files processed"
 
 # ============================
+# SSL Certificate Management
+# ============================
+
+log ""
+log "========== SSL CERTIFICATE MANAGEMENT =========="
+
+# Wait for nginx to be fully up
+log "Waiting for nginx to be ready..."
+NGINX_WAIT=0
+NGINX_MAX_WAIT=30
+while [ $NGINX_WAIT -lt $NGINX_MAX_WAIT ]; do
+    if docker compose -f "$DOCKER_COMPOSE_FILE" exec -T nginx nginx -t > /dev/null 2>&1; then
+        success "Nginx is ready"
+        break
+    fi
+    NGINX_WAIT=$((NGINX_WAIT + 1))
+    sleep 1
+done
+
+# Check if SSL certificates exist
+SSL_CERT_PATH="${PROJECT_DIR}/docker/certbot/conf/live/eduaiia.com/fullchain.pem"
+SSL_KEY_PATH="${PROJECT_DIR}/docker/certbot/conf/live/eduaiia.com/privkey.pem"
+
+if [ -f "$SSL_CERT_PATH" ] && [ -f "$SSL_KEY_PATH" ]; then
+    log "SSL certificates found - enabling HTTPS..."
+    
+    NGINX_CONF="${PROJECT_DIR}/docker/nginx/default.conf"
+    
+    # Check if HTTPS block is commented out
+    if grep -q "^# server {" "$NGINX_CONF" && grep -A 2 "^# server {" "$NGINX_CONF" | grep -q "listen 443"; then
+        log "Enabling HTTPS server block in nginx configuration..."
+        
+        # Create backup
+        cp "$NGINX_CONF" "${NGINX_CONF}.backup"
+        
+        # Uncomment the HTTPS server block using sed
+        # Match range from "# server {" to "# }" and remove one leading # from each line
+        # This preserves indentation and handles nested comments correctly
+        sed -i.tmp '/^# server {/,/^# }$/ {
+            # For the opening comment line, update it
+            /^# HTTPS server/ { s/^# HTTPS server.*/# HTTPS server - automatically enabled/; }
+            # Remove one # from lines that start with # followed by space or letter (not ##)
+            /^# [^#]/ { s/^# //; }
+            # Handle the closing brace
+            /^# }$/ { s/^# / /; }
+        }' "$NGINX_CONF"
+        
+        # Remove temporary file
+        rm -f "${NGINX_CONF}.tmp"
+        
+        # Also enable HTTP to HTTPS redirect (but keep ACME challenge accessible)
+        if grep -q "# Redirect to HTTPS" "$NGINX_CONF" && grep -A 3 "# Redirect to HTTPS" "$NGINX_CONF" | grep -q "# location /"; then
+            log "Enabling HTTP to HTTPS redirect..."
+            # Uncomment the redirect block
+            sed -i.tmp2 '/# Redirect to HTTPS/,/# Serve directly over HTTP/ {
+                /#     location \/ {/ { s/^#     /    /; }
+                /#     return 301/ { s/^#     /    /; }
+                /#     }$/ { s/^#     /    /; }
+            }' "$NGINX_CONF"
+            rm -f "${NGINX_CONF}.tmp2"
+            
+            # Update the comment
+            sed -i.tmp3 's/^    # Redirect to HTTPS (uncomment when SSL is ready)/    # Redirect to HTTPS (enabled automatically)/' "$NGINX_CONF"
+            sed -i.tmp3 's/^    # Serve directly over HTTP (remove when HTTPS is ready)/    # HTTP proxy disabled - redirecting to HTTPS (ACME challenge still works)/' "$NGINX_CONF"
+            rm -f "${NGINX_CONF}.tmp3"
+        fi
+        
+        # Test nginx configuration
+        if docker compose -f "$DOCKER_COMPOSE_FILE" exec -T nginx nginx -t 2>&1 | tee -a "$LOG_FILE"; then
+            # Reload nginx
+            if docker compose -f "$DOCKER_COMPOSE_FILE" exec -T nginx nginx -s reload 2>&1 | tee -a "$LOG_FILE"; then
+                success "HTTPS enabled with HTTP redirect and nginx reloaded"
+                rm -f "${NGINX_CONF}.backup"
+            else
+                warn "Failed to reload nginx, restarting container..."
+                docker compose -f "$DOCKER_COMPOSE_FILE" restart nginx 2>&1 | tee -a "$LOG_FILE" || true
+                if docker compose -f "$DOCKER_COMPOSE_FILE" exec -T nginx nginx -t > /dev/null 2>&1; then
+                    success "HTTPS enabled after nginx restart"
+                    rm -f "${NGINX_CONF}.backup"
+                else
+                    warn "Nginx configuration invalid, restoring backup..."
+                    mv "${NGINX_CONF}.backup" "$NGINX_CONF"
+                    docker compose -f "$DOCKER_COMPOSE_FILE" restart nginx 2>&1 | tee -a "$LOG_FILE" || true
+                fi
+            fi
+        else
+            warn "Nginx configuration test failed, restoring backup..."
+            mv "${NGINX_CONF}.backup" "$NGINX_CONF"
+            docker compose -f "$DOCKER_COMPOSE_FILE" restart nginx 2>&1 | tee -a "$LOG_FILE" || true
+        fi
+    else
+        # Check if HTTPS is already enabled
+        if grep -q "^server {" "$NGINX_CONF" && grep -A 2 "^server {" "$NGINX_CONF" | grep -q "listen 443"; then
+            log "HTTPS is already enabled in nginx configuration"
+        else
+            warn "HTTPS server block not found in expected format - manual configuration may be needed"
+        fi
+    fi
+else
+    log "SSL certificates not found at $SSL_CERT_PATH"
+    log "To enable HTTPS:"
+    log "  1. Ensure domain eduaiia.com points to this server"
+    log "  2. Run: docker compose exec certbot certbot certonly --webroot -w /var/www/certbot -d eduaiia.com -d www.eduaiia.com --email your-email@example.com --agree-tos --non-interactive"
+    log "  3. Run this deployment script again to automatically enable HTTPS"
+fi
+
+# ============================
 # Health Checks & Verification
 # ============================
 
