@@ -401,8 +401,20 @@ if ! git fetch origin "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
     fail "Failed to fetch from git remote"
 fi
 
+# Clean up any permission issues before reset
+log "Cleaning up any permission issues..."
+git clean -fd 2>&1 | tee -a "$LOG_FILE" || true
+# Fix any file/directory permission issues that might prevent reset
+find . -type f -name "*.conf" -exec chmod 644 {} \; 2>/dev/null || true
+find . -type d -exec chmod 755 {} \; 2>/dev/null || true
+
 if ! git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
-    fail "Failed to reset git repository"
+    # If reset fails due to permission issues, try cleaning first
+    warn "Git reset failed, attempting cleanup and retry..."
+    git clean -fdx 2>&1 | tee -a "$LOG_FILE" || true
+    if ! git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
+        fail "Failed to reset git repository after cleanup"
+    fi
 fi
 success "Code pulled successfully from $GIT_BRANCH"
 
@@ -433,6 +445,15 @@ if [ $STOP_ATTEMPT -eq $STOP_MAX ]; then
     docker compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
 fi
 
+# Remove any lingering containers that might cause conflicts
+log "Removing any conflicting containers..."
+docker ps -a --format "{{.Names}}" | grep -E "^(main_app|ai_redis|ai_psql|ai-search|ai_nginx|certbot)" | while read -r container; do
+    if [ -n "$container" ]; then
+        log "Removing conflicting container: $container"
+        docker rm -f "$container" 2>&1 | tee -a "$LOG_FILE" || true
+    fi
+done || true
+
 log "Step 5/6: Building Docker images (this may take several minutes)..."
 if ! docker compose -f "$DOCKER_COMPOSE_FILE" build --no-cache 2>&1 | tee -a "$LOG_FILE"; then
     fail "Failed to build Docker images"
@@ -441,9 +462,31 @@ success "Docker images built successfully"
 
 log "Step 6/6: Starting containers..."
 if ! docker compose -f "$DOCKER_COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"; then
-    fail "Failed to start containers"
+    # If startup fails due to container name conflicts, remove them and retry
+    warn "Container startup failed, checking for conflicts..."
+    docker ps -a --format "{{.Names}}" | grep -E "^(main_app|ai_redis|ai_psql|ai-search|ai_nginx|certbot)" | while read -r container; do
+        if [ -n "$container" ]; then
+            log "Removing conflicting container: $container"
+            docker rm -f "$container" 2>&1 | tee -a "$LOG_FILE" || true
+        fi
+    done || true
+    sleep 2
+    if ! docker compose -f "$DOCKER_COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"; then
+        fail "Failed to start containers after conflict resolution"
+    fi
 fi
-success "Containers started"
+
+# Verify containers actually started
+sleep 3
+RUNNING_COUNT=$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --format json 2>/dev/null | grep -c '"State":"running"' || echo "0")
+if [ "$RUNNING_COUNT" -eq "0" ]; then
+    warn "No containers appear to be running, checking logs..."
+    docker compose -f "$DOCKER_COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
+    docker compose -f "$DOCKER_COMPOSE_FILE" logs --tail=50 2>&1 | tee -a "$LOG_FILE" || true
+    warn "Containers may still be starting up..."
+else
+    success "Containers started ($RUNNING_COUNT running)"
+fi
 
 # ============================
 # Database & Services Setup
