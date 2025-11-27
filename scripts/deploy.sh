@@ -322,15 +322,25 @@ ensure_git_repo() {
 handle_git_conflicts() {
     log "Checking for git conflicts..."
     
+    # Abort any ongoing operations first
+    git merge --abort 2>/dev/null || true
+    git rebase --abort 2>/dev/null || true
+    git cherry-pick --abort 2>/dev/null || true
+    
     if git status 2>/dev/null | grep -q "both modified\|both added\|both deleted\|Unmerged paths"; then
         warn "Git conflicts detected. Attempting to resolve..."
-        if git merge --abort 2>/dev/null; then
-            success "Merge conflict resolved with abort"
-        fi
         log "Cleaning up git state..."
+        # Reset any unmerged paths
+        git reset --hard HEAD 2>/dev/null || true
         git clean -fd || true
     fi
-    success "No conflicting git states"
+    
+    # Check for any uncommitted changes
+    if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        log "Uncommitted changes detected, will be discarded during update"
+    fi
+    
+    success "Git state cleaned up"
 }
 
 # ============================
@@ -393,17 +403,95 @@ create_backup
 
 log ""
 log "========== GIT OPERATIONS (continued) =========="
-log "Step 2/7: Handling git conflicts..."
+log "Step 2/7: Handling git conflicts and local changes..."
 handle_git_conflicts
 
-log "Step 3/6: Pulling latest code from git..."
+log "Step 3/7: Preparing repository for update..."
+
+# Ensure we're on the correct branch
+log "Ensuring we're on branch $GIT_BRANCH..."
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+if [ "$CURRENT_BRANCH" != "$GIT_BRANCH" ]; then
+    log "Current branch is $CURRENT_BRANCH, switching to $GIT_BRANCH..."
+    # Try to checkout the branch, creating it if it doesn't exist locally
+    git checkout -B "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+fi
+
+# Abort any ongoing merge or rebase
+log "Aborting any ongoing merge or rebase..."
+git merge --abort 2>/dev/null || true
+git rebase --abort 2>/dev/null || true
+git cherry-pick --abort 2>/dev/null || true
+
+# Discard all local changes to tracked files (including staged changes)
+log "Discarding all local changes to tracked files..."
+git reset --hard HEAD 2>&1 | tee -a "$LOG_FILE" || true
+# Also unstage any files that might be in the index
+git reset HEAD . 2>&1 | tee -a "$LOG_FILE" || true
+git reset --hard HEAD 2>&1 | tee -a "$LOG_FILE" || true
+
+# Fetch latest changes
+log "Fetching latest code from git..."
 if ! git fetch origin "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
     fail "Failed to fetch from git remote"
 fi
 
-# Clean up any permission issues and file/directory confusion before reset
-log "Cleaning up any permission issues..."
-git clean -fd 2>&1 | tee -a "$LOG_FILE" || true
+# Check what files would be affected by the update
+log "Checking for files that would conflict with update..."
+CONFLICTING_FILES=$(git diff --name-only HEAD origin/"$GIT_BRANCH" 2>/dev/null || true)
+
+# Get list of files that exist in remote branch
+REMOTE_FILES=$(git ls-tree -r origin/"$GIT_BRANCH" --name-only 2>/dev/null || true)
+
+# Remove untracked files that would be overwritten by files in remote
+if [ -n "$REMOTE_FILES" ]; then
+    log "Checking for untracked files that would conflict with remote..."
+    UNTRACKED_CONFLICTS=$(git ls-files --others --exclude-standard 2>/dev/null || true)
+    if [ -n "$UNTRACKED_CONFLICTS" ]; then
+        for file in $UNTRACKED_CONFLICTS; do
+            # Check if this untracked file exists in the remote branch
+            if echo "$REMOTE_FILES" | grep -q "^$file$"; then
+                log "Removing untracked file that exists in remote: $file"
+                rm -f "$file" 2>/dev/null || true
+                # Also remove from git index if it's somehow tracked
+                git rm --cached "$file" 2>/dev/null || true
+            fi
+        done
+    fi
+fi
+
+# Clean up untracked files, but be careful with important directories
+log "Cleaning up untracked files..."
+# First, handle specific files that are known to cause conflicts
+for file in .github/workflows/deploy.yml Dockerfile code/jinja2/base.html code/main/settings.py docker-compose.yml code/templates/index.html; do
+    if [ -f "$file" ] && echo "$REMOTE_FILES" | grep -q "^$file$"; then
+        # This file exists locally and in remote, check if it's untracked
+        if ! git ls-files --error-unmatch "$file" >/dev/null 2>&1; then
+            log "Removing untracked file that conflicts with remote: $file"
+            rm -f "$file" 2>/dev/null || true
+            git rm --cached "$file" 2>/dev/null || true
+        fi
+    fi
+done
+
+# Clean up other untracked files, but preserve important directories
+# We'll do a selective clean to avoid removing logs, storage, config, etc.
+UNTRACKED_ALL=$(git ls-files --others --exclude-standard --directory 2>/dev/null || true)
+if [ -n "$UNTRACKED_ALL" ]; then
+    for item in $UNTRACKED_ALL; do
+        # Skip important directories and their contents
+        if [[ "$item" != logs/* && "$item" != storage/* && "$item" != config/* && "$item" != .backups/* && "$item" != logs && "$item" != storage && "$item" != config && "$item" != .backups ]]; then
+            # Check if this item exists in remote
+            if echo "$REMOTE_FILES" | grep -q "^$item"; then
+                log "Removing untracked item that exists in remote: $item"
+                rm -rf "$item" 2>/dev/null || true
+            fi
+        fi
+    done
+fi
+
+# Final cleanup of any remaining problematic untracked files (but not important dirs)
+git clean -fd 2>&1 | grep -v -E "(logs/|storage/|config/|\.backups/)" | tee -a "$LOG_FILE" || true
 
 # Fix git index issues where files might be tracked as directories
 if [ -f "docker/nginx/default.conf" ] && [ ! -d "docker/nginx/default.conf" ]; then
@@ -423,17 +511,36 @@ if [ -d "docker/nginx/default.conf" ]; then
     rm -rf "docker/nginx/default.conf" 2>/dev/null || true
 fi
 
+# Reset to match remote branch exactly
+log "Resetting to match remote branch origin/$GIT_BRANCH..."
 if ! git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
-    # If reset fails due to permission issues, try more aggressive cleanup
+    # If reset fails, try more aggressive cleanup
     warn "Git reset failed, attempting aggressive cleanup and retry..."
     git clean -fdx 2>&1 | tee -a "$LOG_FILE" || true
     # Remove problematic paths manually
     rm -rf "docker/nginx/default.conf" 2>/dev/null || true
+    # Try reset again
     if ! git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
-        fail "Failed to reset git repository after cleanup"
+        # Last resort: checkout the branch directly
+        warn "Hard reset failed, trying checkout approach..."
+        git checkout -f "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+        git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+        if ! git diff --quiet HEAD origin/"$GIT_BRANCH" 2>/dev/null; then
+            fail "Failed to reset git repository to match remote after multiple attempts"
+        fi
     fi
 fi
-success "Code pulled successfully from $GIT_BRANCH"
+
+# Verify we're on the correct commit
+CURRENT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+REMOTE_COMMIT=$(git rev-parse origin/"$GIT_BRANCH" 2>/dev/null || echo "unknown")
+if [ "$CURRENT_COMMIT" != "$REMOTE_COMMIT" ]; then
+    warn "Commit mismatch detected. Current: $CURRENT_COMMIT, Remote: $REMOTE_COMMIT"
+    warn "Attempting final sync..."
+    git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || fail "Failed to sync with remote branch"
+fi
+
+success "Code pulled successfully from $GIT_BRANCH (commit: ${CURRENT_COMMIT:0:8})"
 
 # ============================
 # Docker Operations
