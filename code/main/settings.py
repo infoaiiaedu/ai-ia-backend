@@ -1,6 +1,8 @@
 from os.path import join
 from pathlib import Path
 from pyconf import BASE_DIR, get_config, get_database
+import os
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -132,7 +134,8 @@ BOG_TERMINAL_ID = "POS382XZ"
 
 WSGI_APPLICATION = "main.wsgi.application"
 
-import sys
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
 
 LOGGING = {
     "version": 1,
@@ -151,7 +154,7 @@ LOGGING = {
         },
         "payments_file": {
             "class": "logging.FileHandler",
-            "filename": "/app/logs/payments.log",  # CHANGED: Use /app/logs instead of /app/storage
+            "filename": str(LOG_DIR / "payments.log"),  # FIXED: Use relative path
             "formatter": "verbose",
             "level": "INFO",
         },
