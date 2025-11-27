@@ -112,7 +112,7 @@ services:
         max-file: "3"
 
   search:
-    image: getmeili/meilisearch:v1.6
+    image: getmeili/meilisearch:v1.1.1
     container_name: ai-search
     restart: always
     volumes:
