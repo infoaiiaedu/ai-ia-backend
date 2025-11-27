@@ -401,17 +401,34 @@ if ! git fetch origin "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
     fail "Failed to fetch from git remote"
 fi
 
-# Clean up any permission issues before reset
+# Clean up any permission issues and file/directory confusion before reset
 log "Cleaning up any permission issues..."
 git clean -fd 2>&1 | tee -a "$LOG_FILE" || true
-# Fix any file/directory permission issues that might prevent reset
+
+# Fix git index issues where files might be tracked as directories
+if [ -f "docker/nginx/default.conf" ] && [ ! -d "docker/nginx/default.conf" ]; then
+    # File exists and is actually a file, but git might think it's a directory
+    git rm --cached -r "docker/nginx/default.conf" 2>/dev/null || true
+fi
+
+# Fix git permissions (Fix 2: Enhanced permission handling)
+log "Fixing git repository permissions..."
 find . -type f -name "*.conf" -exec chmod 644 {} \; 2>/dev/null || true
 find . -type d -exec chmod 755 {} \; 2>/dev/null || true
+chmod -R 755 .git 2>/dev/null || true
+
+# Remove any directories that git thinks are files or vice versa
+if [ -d "docker/nginx/default.conf" ]; then
+    warn "Found directory where file should be, removing..."
+    rm -rf "docker/nginx/default.conf" 2>/dev/null || true
+fi
 
 if ! git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
-    # If reset fails due to permission issues, try cleaning first
-    warn "Git reset failed, attempting cleanup and retry..."
+    # If reset fails due to permission issues, try more aggressive cleanup
+    warn "Git reset failed, attempting aggressive cleanup and retry..."
     git clean -fdx 2>&1 | tee -a "$LOG_FILE" || true
+    # Remove problematic paths manually
+    rm -rf "docker/nginx/default.conf" 2>/dev/null || true
     if ! git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
         fail "Failed to reset git repository after cleanup"
     fi
@@ -445,14 +462,13 @@ if [ $STOP_ATTEMPT -eq $STOP_MAX ]; then
     docker compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
 fi
 
-# Remove any lingering containers that might cause conflicts
-log "Removing any conflicting containers..."
-docker ps -a --format "{{.Names}}" | grep -E "^(main_app|ai_redis|ai_psql|ai-search|ai_nginx|certbot)" | while read -r container; do
-    if [ -n "$container" ]; then
-        log "Removing conflicting container: $container"
-        docker rm -f "$container" 2>&1 | tee -a "$LOG_FILE" || true
-    fi
-done || true
+# Fix 1: Enhanced Container Cleanup - More aggressive cleanup
+log "Force removing all project containers..."
+docker compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans --rmi all --volumes 2>&1 | tee -a "$LOG_FILE" || true
+
+# Remove any dangling containers
+log "Cleaning up any dangling containers..."
+docker ps -aq --filter "name=main_app\|ai_redis\|ai_psql\|ai-search\|ai_nginx\|ai_certbot" | xargs -r docker rm -f 2>&1 | tee -a "$LOG_FILE" || true
 
 log "Step 5/6: Building Docker images (this may take several minutes)..."
 if ! docker compose -f "$DOCKER_COMPOSE_FILE" build --no-cache 2>&1 | tee -a "$LOG_FILE"; then
@@ -461,31 +477,56 @@ fi
 success "Docker images built successfully"
 
 log "Step 6/6: Starting containers..."
+
+# Final cleanup of any remaining conflicting containers right before starting
+log "Final cleanup of conflicting containers before startup..."
+docker ps -aq --filter "name=main_app\|ai_redis\|ai_psql\|ai-search\|ai_nginx\|ai_certbot" | xargs -r docker rm -f 2>&1 | tee -a "$LOG_FILE" || true
+# Wait a moment for Docker to process removals
+sleep 2
+
 if ! docker compose -f "$DOCKER_COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"; then
     # If startup fails due to container name conflicts, remove them and retry
     warn "Container startup failed, checking for conflicts..."
-    docker ps -a --format "{{.Names}}" | grep -E "^(main_app|ai_redis|ai_psql|ai-search|ai_nginx|certbot)" | while read -r container; do
-        if [ -n "$container" ]; then
+    for container in main_app ai_redis ai_psql ai-search ai_nginx ai_certbot; do
+        if docker ps -a --format "{{.Names}}" | grep -q "^${container}$"; then
             log "Removing conflicting container: $container"
             docker rm -f "$container" 2>&1 | tee -a "$LOG_FILE" || true
         fi
-    done || true
+    done
     sleep 2
     if ! docker compose -f "$DOCKER_COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"; then
         fail "Failed to start containers after conflict resolution"
     fi
 fi
 
-# Verify containers actually started
-sleep 3
-RUNNING_COUNT=$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --format json 2>/dev/null | grep -c '"State":"running"' || echo "0")
-if [ "$RUNNING_COUNT" -eq "0" ]; then
-    warn "No containers appear to be running, checking logs..."
+# Fix 3: Better Container Startup Verification
+log "Waiting for all containers to start..."
+MAX_WAIT=60
+ELAPSED=0
+TOTAL_SERVICES=$(docker compose -f "$DOCKER_COMPOSE_FILE" config --services 2>/dev/null | wc -l)
+
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+    RUNNING_COUNT=0
+    for service in $(docker compose -f "$DOCKER_COMPOSE_FILE" config --services 2>/dev/null); do
+        if docker compose -f "$DOCKER_COMPOSE_FILE" ps "$service" --format json 2>/dev/null | grep -q '"State":"running"'; then
+            RUNNING_COUNT=$((RUNNING_COUNT + 1))
+        fi
+    done
+    
+    if [ "$RUNNING_COUNT" -eq "$TOTAL_SERVICES" ] && [ "$TOTAL_SERVICES" -gt "0" ]; then
+        success "All $TOTAL_SERVICES containers are running"
+        break
+    fi
+    ELAPSED=$((ELAPSED + 5))
+    log "Waiting for containers... ($RUNNING_COUNT/$TOTAL_SERVICES running, ${ELAPSED}s)"
+    sleep 5
+done
+
+if [ $ELAPSED -ge $MAX_WAIT ]; then
+    warn "Some containers failed to start within $MAX_WAIT seconds"
+    log "Current container status:"
     docker compose -f "$DOCKER_COMPOSE_FILE" ps 2>&1 | tee -a "$LOG_FILE"
     docker compose -f "$DOCKER_COMPOSE_FILE" logs --tail=50 2>&1 | tee -a "$LOG_FILE" || true
-    warn "Containers may still be starting up..."
-else
-    success "Containers started ($RUNNING_COUNT running)"
 fi
 
 # ============================
@@ -495,8 +536,8 @@ fi
 log ""
 log "========== DATABASE & SERVICES SETUP =========="
 
-log "Waiting 30 seconds for services to stabilize..."
-for i in {30..1}; do
+log "Waiting 10 seconds for services to stabilize..."
+for i in {10..1}; do
     echo -ne "\rWaiting: ${i}s remaining  "
     sleep 1
 done
@@ -645,29 +686,68 @@ log "Step 7/7: Running health checks..."
 # Check containers
 CONTAINERS_OK=true
 
-if docker compose -f "$DOCKER_COMPOSE_FILE" ps app | grep -q "Up\|running"; then
-    success "App container is running"
+# Check app container
+if docker ps --format "{{.Names}}" | grep -q "^main_app$"; then
+    APP_STATUS=$(docker inspect -f '{{.State.Status}}' main_app 2>/dev/null || echo "unknown")
+    if [ "$APP_STATUS" = "running" ]; then
+        success "App container is running"
+    else
+        error "App container exists but status is: $APP_STATUS"
+        CONTAINERS_OK=false
+    fi
 else
-    error "App container is NOT running"
+    error "App container (main_app) is NOT running"
     CONTAINERS_OK=false
 fi
 
-if docker compose -f "$DOCKER_COMPOSE_FILE" ps psql | grep -q "Up\|running"; then
-    success "PostgreSQL container is running"
+# Check PostgreSQL container
+if docker ps --format "{{.Names}}" | grep -q "^ai_psql$"; then
+    PSQL_STATUS=$(docker inspect -f '{{.State.Status}}' ai_psql 2>/dev/null || echo "unknown")
+    if [ "$PSQL_STATUS" = "running" ]; then
+        success "PostgreSQL container is running"
+    else
+        error "PostgreSQL container exists but status is: $PSQL_STATUS"
+        CONTAINERS_OK=false
+    fi
 else
-    error "PostgreSQL container is NOT running"
+    error "PostgreSQL container (ai_psql) is NOT running"
     CONTAINERS_OK=false
 fi
 
-if docker compose -f "$DOCKER_COMPOSE_FILE" ps redis | grep -q "Up\|running"; then
-    success "Redis container is running"
+# Check Redis container
+if docker ps --format "{{.Names}}" | grep -q "^ai_redis$"; then
+    REDIS_STATUS=$(docker inspect -f '{{.State.Status}}' ai_redis 2>/dev/null || echo "unknown")
+    if [ "$REDIS_STATUS" = "running" ]; then
+        success "Redis container is running"
+    else
+        error "Redis container exists but status is: $REDIS_STATUS"
+        CONTAINERS_OK=false
+    fi
 else
-    error "Redis container is NOT running"
+    error "Redis container (ai_redis) is NOT running"
     CONTAINERS_OK=false
 fi
 
-if docker compose -f "$DOCKER_COMPOSE_FILE" ps nginx | grep -q "Up\|running"; then
-    success "Nginx container is running"
+# Check search container
+if docker ps --format "{{.Names}}" | grep -q "^ai-search$"; then
+    SEARCH_STATUS=$(docker inspect -f '{{.State.Status}}' ai-search 2>/dev/null || echo "unknown")
+    if [ "$SEARCH_STATUS" = "running" ]; then
+        success "Search container is running"
+    else
+        warn "Search container exists but status is: $SEARCH_STATUS"
+    fi
+else
+    warn "Search container (ai-search) is not running (may be optional)"
+fi
+
+# Check nginx container
+if docker ps --format "{{.Names}}" | grep -q "^ai_nginx$"; then
+    NGINX_STATUS=$(docker inspect -f '{{.State.Status}}' ai_nginx 2>/dev/null || echo "unknown")
+    if [ "$NGINX_STATUS" = "running" ]; then
+        success "Nginx container is running"
+    else
+        warn "Nginx container exists but status is: $NGINX_STATUS"
+    fi
 else
     warn "Nginx container is not running (may be optional)"
 fi
