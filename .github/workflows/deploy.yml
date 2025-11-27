@@ -55,6 +55,7 @@ jobs:
         run: |
           mkdir -p storage
           mkdir -p logs  # Create logs directory for Django logging
+          mkdir -p config  # Create config directory (deploy script creates it if missing)
 
       - name: Check repository structure
         run: |
@@ -88,8 +89,12 @@ jobs:
           # Check for required directories
           REQUIRED_DIRS=(
             "code"
-            "config"
             "docker"
+          )
+          
+          # Optional directories (will be created if missing)
+          OPTIONAL_DIRS=(
+            "config"
           )
           
           MISSING_DIRS=()
@@ -97,6 +102,15 @@ jobs:
             if [ ! -d "$dir" ]; then
               MISSING_DIRS+=("$dir")
               echo "❌ Missing required directory: $dir"
+            else
+              echo "✓ Found: $dir"
+            fi
+          done
+          
+          # Check optional directories (warn if missing, but don't fail)
+          for dir in "${OPTIONAL_DIRS[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "⚠ Optional directory not found: $dir (will be created during deployment)"
             else
               echo "✓ Found: $dir"
             fi
