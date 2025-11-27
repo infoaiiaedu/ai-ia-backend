@@ -12,8 +12,6 @@
             <link rel="canonical" href="https://sportall.ge{{ article.url }}" />
         {% endif %}
 
-
-
         <link
         rel="icon"
         type="image/svg"
@@ -39,9 +37,14 @@
             {% endfor %}
         {%- endif %}
 
-        {% for item in manifest.links -%} {{ item.html|safe }} {%- endfor %}
+        {# FIXED: Check if manifest exists before accessing its properties #}
+        {% if manifest and manifest.links -%}
+            {% for item in manifest.links -%} {{ item.html|safe }} {%- endfor %}
+        {%- endif %}
 
-        {% for item in manifest.modules -%} {{ item.html|safe }} {%- endfor %}
+        {% if manifest and manifest.modules -%}
+            {% for item in manifest.modules -%} {{ item.html|safe }} {%- endfor %}
+        {%- endif %}
 
         <link rel="stylesheet" href="/static/fonts/fonts.css">
 

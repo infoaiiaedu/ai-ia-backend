@@ -36,8 +36,10 @@ RUN apk add --no-cache \
     ghostscript \
     libjpeg-turbo
 
-# Create necessary dirs (logs, cache, storage for app logs)
-RUN mkdir -p logs cache /app/storage
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/storage /app/logs /app/cache && \
+    chown -R app:app /app && \
+    chmod -R 755 /app
 
 # Copy Python wheels and install
 COPY --from=builder /usr/src/app/wheels /wheels
@@ -47,10 +49,41 @@ RUN pip install --upgrade pip \
 # Copy application code
 COPY ./code /app/code
 
-# Set permissions
-RUN chown -R app:app /app
+# Set proper permissions for the entire app directory
+RUN chown -R app:app /app && \
+    chmod -R 755 /app && \
+    chmod -R 775 /app/storage && \
+    chmod -R 775 /app/logs
 
 USER app
 
-# Default command (matches docker-compose.yml)
-CMD ["/bin/sh", "-c", "set -e && echo 'Creating storage directories...' && mkdir -p /app/storage && echo 'Waiting for Postgres...' && TIMEOUT=60 && ELAPSED=0 && until pg_isready -h psql -U postgres; do sleep 2 && ELAPSED=$((ELAPSED + 2)) && if [ $ELAPSED -ge $TIMEOUT ]; then echo 'ERROR: PostgreSQL not ready after '$TIMEOUT's - exiting' && exit 1; fi && echo 'Waiting... ('$ELAPSED's/'$TIMEOUT's)'; done && echo 'Postgres is ready!' && echo 'Applying migrations...' && python manage.py migrate --noinput && echo 'Collecting static files...' && python manage.py collectstatic --noinput --no-post-process && echo 'Starting Gunicorn...' && exec gunicorn main.wsgi:application --bind 0.0.0.0:5000 --workers 2 --threads 2 --log-level info"]
+# Create entrypoint script to handle initialization
+RUN echo '#!/bin/sh\n\
+set -e\n\
+echo "Creating storage directories..."\n\
+mkdir -p /app/storage /app/logs /app/cache\n\
+echo "Setting permissions..."\n\
+chmod -R 755 /app\n\
+chmod -R 775 /app/storage /app/logs\n\
+echo "Waiting for Postgres..."\n\
+TIMEOUT=60\n\
+ELAPSED=0\n\
+until pg_isready -h psql -U postgres; do\n\
+  sleep 2\n\
+  ELAPSED=$((ELAPSED + 2))\n\
+  if [ $ELAPSED -ge $TIMEOUT ]; then\n\
+    echo "ERROR: PostgreSQL not ready after ${TIMEOUT}s - exiting"\n\
+    exit 1\n\
+  fi\n\
+  echo "Waiting... (${ELAPSED}s/${TIMEOUT}s)"\n\
+done\n\
+echo "Postgres is ready!"\n\
+echo "Applying migrations..."\n\
+python manage.py migrate --noinput\n\
+echo "Collecting static files..."\n\
+python manage.py collectstatic --noinput --no-post-process\n\
+echo "Starting Gunicorn..."\n\
+exec gunicorn main.wsgi:application --bind 0.0.0.0:5000 --workers 2 --threads 2 --log-level info\n\
+' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+
+CMD ["/app/entrypoint.sh"]

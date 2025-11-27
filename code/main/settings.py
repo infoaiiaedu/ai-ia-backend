@@ -151,7 +151,7 @@ LOGGING = {
         },
         "payments_file": {
             "class": "logging.FileHandler",
-            "filename": str(STORAGE_DIR / "payments.log"),
+            "filename": "/app/logs/payments.log",  # CHANGED: Use /app/logs instead of /app/storage
             "formatter": "verbose",
             "level": "INFO",
         },
