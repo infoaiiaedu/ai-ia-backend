@@ -163,7 +163,7 @@ jobs:
           
           echo "📊 Final container status:"
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=6 -o ConnectTimeout=10 -o ConnectionAttempts=5 -o StrictHostKeyChecking=accept-new"
-          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && docker-compose ps" || true
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && docker compose ps" || true
           
           echo ""
           echo "📝 Recent deployment logs:"

@@ -202,7 +202,7 @@ verify_prerequisites() {
     fi
     success "Docker found"
     
-    if ! command -v docker-compose &> /dev/null; then
+    if ! docker compose version &> /dev/null; then
         fail "Docker Compose is not installed"
     fi
     success "Docker Compose found"
@@ -302,7 +302,7 @@ log "Step 3/6: Stopping containers gracefully..."
 STOP_ATTEMPT=0
 STOP_MAX=3
 while [ $STOP_ATTEMPT -lt $STOP_MAX ]; do
-    if docker-compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE"; then
+    if docker compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE"; then
         success "Containers stopped gracefully"
         break
     else
@@ -315,17 +315,17 @@ while [ $STOP_ATTEMPT -lt $STOP_MAX ]; do
 done
 if [ $STOP_ATTEMPT -eq $STOP_MAX ]; then
     warn "Could not stop some containers gracefully, forcing shutdown..."
-    docker-compose -f "$DOCKER_COMPOSE_FILE" down -f --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
+    docker compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
 fi
 
 log "Step 4/6: Building Docker images (this may take several minutes)..."
-if ! docker-compose -f "$DOCKER_COMPOSE_FILE" build --no-cache 2>&1 | tee -a "$LOG_FILE"; then
+if ! docker compose -f "$DOCKER_COMPOSE_FILE" build --no-cache 2>&1 | tee -a "$LOG_FILE"; then
     fail "Failed to build Docker images"
 fi
 success "Docker images built successfully"
 
 log "Step 5/6: Starting containers..."
-if ! docker-compose -f "$DOCKER_COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"; then
+if ! docker compose -f "$DOCKER_COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"; then
     fail "Failed to start containers"
 fi
 success "Containers started"
@@ -349,7 +349,7 @@ DB_READY_ATTEMPT=0
 DB_READY_MAX=5
 while [ $DB_READY_ATTEMPT -lt $DB_READY_MAX ]; do
     log "Database connection attempt $((DB_READY_ATTEMPT + 1))/$DB_READY_MAX..."
-    if docker-compose -f "$DOCKER_COMPOSE_FILE" exec -T app python manage.py migrate --noinput 2>&1 | tee -a "$LOG_FILE"; then
+    if docker compose -f "$DOCKER_COMPOSE_FILE" exec -T app python manage.py migrate --noinput 2>&1 | tee -a "$LOG_FILE"; then
         success "Database ready and migrations applied"
         break
     else
@@ -361,11 +361,11 @@ while [ $DB_READY_ATTEMPT -lt $DB_READY_MAX ]; do
     fi
 done
 if [ $DB_READY_ATTEMPT -eq $DB_READY_MAX ]; then
-    fail "Database is still locked after $DB_READY_MAX attempts. Check database logs: docker-compose logs psql"
+    fail "Database is still locked after $DB_READY_MAX attempts. Check database logs: docker compose logs psql"
 fi
 
 log "Collecting static files..."
-if ! docker-compose -f "$DOCKER_COMPOSE_FILE" exec -T app python manage.py collectstatic --noinput --clear --no-post-process 2>&1 | tee -a "$LOG_FILE"; then
+if ! docker compose -f "$DOCKER_COMPOSE_FILE" exec -T app python manage.py collectstatic --noinput --no-post-process 2>&1 | tee -a "$LOG_FILE"; then
     warn "Static file collection had issues (may be normal)"
 fi
 success "Static files processed"
@@ -380,28 +380,28 @@ log "Step 6/6: Running health checks..."
 # Check containers
 CONTAINERS_OK=true
 
-if docker-compose -f "$DOCKER_COMPOSE_FILE" ps app | grep -q "Up"; then
+if docker compose -f "$DOCKER_COMPOSE_FILE" ps app | grep -q "Up\|running"; then
     success "App container is running"
 else
     error "App container is NOT running"
     CONTAINERS_OK=false
 fi
 
-if docker-compose -f "$DOCKER_COMPOSE_FILE" ps psql | grep -q "Up"; then
+if docker compose -f "$DOCKER_COMPOSE_FILE" ps psql | grep -q "Up\|running"; then
     success "PostgreSQL container is running"
 else
     error "PostgreSQL container is NOT running"
     CONTAINERS_OK=false
 fi
 
-if docker-compose -f "$DOCKER_COMPOSE_FILE" ps redis | grep -q "Up"; then
+if docker compose -f "$DOCKER_COMPOSE_FILE" ps redis | grep -q "Up\|running"; then
     success "Redis container is running"
 else
     error "Redis container is NOT running"
     CONTAINERS_OK=false
 fi
 
-if docker-compose -f "$DOCKER_COMPOSE_FILE" ps nginx | grep -q "Up"; then
+if docker compose -f "$DOCKER_COMPOSE_FILE" ps nginx | grep -q "Up\|running"; then
     success "Nginx container is running"
 else
     warn "Nginx container is not running (may be optional)"
@@ -426,7 +426,7 @@ done
 # Display final status
 log ""
 log "Final container status:"
-docker-compose -f "$DOCKER_COMPOSE_FILE" ps | tee -a "$LOG_FILE"
+docker compose -f "$DOCKER_COMPOSE_FILE" ps | tee -a "$LOG_FILE"
 
 # Final summary
 if [ "$CONTAINERS_OK" = true ]; then
@@ -446,5 +446,5 @@ else
     echo ""
     log "Deployment finished with warnings"
     log "Logs saved to: $LOG_FILE"
-    log "Please check container logs: docker-compose logs"
+    log "Please check container logs: docker compose logs"
 fi
