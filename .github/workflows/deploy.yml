@@ -142,87 +142,70 @@ jobs:
           
           # Bootstrap repository if missing or corrupted
           echo "🔧 Bootstrap: Ensuring repository exists on server..."
-          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash" << 'BOOTSTRAP_EOF'
-            set -e
-            cd "$DEPLOY_PATH" || exit 1
-            GIT_REPO='https://github.com/infoaiiaedu/ai-ia-backend.git'
-            GIT_BRANCH='main'
-            
-            # Backup important directories that should be preserved
-            echo '📦 Backing up important directories...'
-            BACKUP_DIR=$(mktemp -d)
-            for dir in config storage docker; do
-              if [ -d "$dir" ]; then
-                cp -r "$dir" "$BACKUP_DIR/" 2>/dev/null || true
-                echo "  ✓ Backed up $dir"
-              fi
-            done
-            
-            # Check repository status and fix if needed
-            NEEDS_CLONE=false
-            if [ -d .git ] && git rev-parse --git-dir > /dev/null 2>&1; then
-              echo '✓ Git repository found, testing connection...'
-              if git fetch origin "$GIT_BRANCH" 2>/dev/null; then
-                echo '✓ Repository is valid and accessible'
-              else
-                echo '⚠ Repository exists but is corrupted, will re-clone...'
-                NEEDS_CLONE=true
-              fi
-            else
-              echo '⚠ No valid git repository found, will clone...'
-              NEEDS_CLONE=true
-            fi
-            
-            # Clone repository if needed
-            if [ "$NEEDS_CLONE" = true ]; then
-              echo '🔄 Cloning repository...'
-              # Remove everything except preserved directories
-              find . -mindepth 1 -maxdepth 1 ! -name 'config' ! -name 'storage' ! -name 'docker' ! -name '.backups' ! -name 'logs' ! -name '.tmp_repo' -exec rm -rf {} \; 2>/dev/null || true
-              # Clone to temporary location
-              git clone -b "$GIT_BRANCH" --single-branch --depth 1 "$GIT_REPO" .tmp_repo 2>&1
-              # Move all files from clone
-              shopt -s dotglob
-              find .tmp_repo -mindepth 1 -maxdepth 1 ! -name '.git' -exec mv {} . \; 2>/dev/null
-              # Move .git directory
-              if [ -d .tmp_repo/.git ]; then
-                mv .tmp_repo/.git . 2>/dev/null || true
-              fi
-              shopt -u dotglob
-              rm -rf .tmp_repo
-              echo '✓ Repository cloned successfully'
-            fi
-            
-            # Restore backed up directories
-            if [ -d "$BACKUP_DIR" ]; then
-              echo '📦 Restoring important directories...'
-              for dir in config storage docker; do
-                if [ -d "$BACKUP_DIR/$dir" ]; then
-                  if [ -d "$dir" ]; then
-                    # Merge: copy files from backup, but don't overwrite existing
-                    cp -rn "$BACKUP_DIR/$dir"/* "$dir/" 2>/dev/null || true
-                    echo "  ✓ Merged $dir"
-                  else
-                    mv "$BACKUP_DIR/$dir" "./" 2>/dev/null || true
-                    echo "  ✓ Restored $dir"
-                  fi
-                fi
-              done
-              rm -rf "$BACKUP_DIR"
-            fi
-            
-            # Verify critical files exist
-            if [ ! -f scripts/deploy.sh ]; then
-              echo '❌ Error: scripts/deploy.sh not found after bootstrap!'
-              echo 'Directory contents:'
-              ls -la
-              exit 1
-            fi
-            if [ ! -f docker-compose.yml ]; then
-              echo '❌ Error: docker-compose.yml not found after bootstrap!'
-              exit 1
-            fi
-            echo '✓ Bootstrap complete: Repository ready for deployment'
-BOOTSTRAP_EOF
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && \
+            set -e && \
+            GIT_REPO='https://github.com/infoaiiaedu/ai-ia-backend.git' && \
+            GIT_BRANCH='main' && \
+            echo '📦 Backing up important directories...' && \
+            BACKUP_DIR=\$(mktemp -d) && \
+            for dir in config storage docker; do \
+              if [ -d \"\$dir\" ]; then \
+                cp -r \"\$dir\" \"\$BACKUP_DIR/\" 2>/dev/null || true && \
+                echo \"  ✓ Backed up \$dir\"; \
+              fi; \
+            done && \
+            NEEDS_CLONE=false && \
+            if [ -d .git ] && git rev-parse --git-dir > /dev/null 2>&1; then \
+              echo '✓ Git repository found, testing connection...' && \
+              if git fetch origin \"\$GIT_BRANCH\" 2>/dev/null; then \
+                echo '✓ Repository is valid and accessible'; \
+              else \
+                echo '⚠ Repository exists but is corrupted, will re-clone...' && \
+                NEEDS_CLONE=true; \
+              fi; \
+            else \
+              echo '⚠ No valid git repository found, will clone...' && \
+              NEEDS_CLONE=true; \
+            fi && \
+            if [ \"\$NEEDS_CLONE\" = true ]; then \
+              echo '🔄 Cloning repository...' && \
+              find . -mindepth 1 -maxdepth 1 ! -name 'config' ! -name 'storage' ! -name 'docker' ! -name '.backups' ! -name 'logs' ! -name '.tmp_repo' -exec rm -rf {} \; 2>/dev/null || true && \
+              git clone -b \"\$GIT_BRANCH\" --single-branch --depth 1 \"\$GIT_REPO\" .tmp_repo 2>&1 && \
+              shopt -s dotglob && \
+              find .tmp_repo -mindepth 1 -maxdepth 1 ! -name '.git' -exec mv {} . \; 2>/dev/null && \
+              if [ -d .tmp_repo/.git ]; then \
+                mv .tmp_repo/.git . 2>/dev/null || true; \
+              fi && \
+              shopt -u dotglob && \
+              rm -rf .tmp_repo && \
+              echo '✓ Repository cloned successfully'; \
+            fi && \
+            if [ -d \"\$BACKUP_DIR\" ]; then \
+              echo '📦 Restoring important directories...' && \
+              for dir in config storage docker; do \
+                if [ -d \"\$BACKUP_DIR/\$dir\" ]; then \
+                  if [ -d \"\$dir\" ]; then \
+                    cp -rn \"\$BACKUP_DIR/\$dir\"/* \"\$dir/\" 2>/dev/null || true && \
+                    echo \"  ✓ Merged \$dir\"; \
+                  else \
+                    mv \"\$BACKUP_DIR/\$dir\" \"./\" 2>/dev/null || true && \
+                    echo \"  ✓ Restored \$dir\"; \
+                  fi; \
+                fi; \
+              done && \
+              rm -rf \"\$BACKUP_DIR\"; \
+            fi && \
+            if [ ! -f scripts/deploy.sh ]; then \
+              echo '❌ Error: scripts/deploy.sh not found after bootstrap!' && \
+              echo 'Directory contents:' && \
+              ls -la && \
+              exit 1; \
+            fi && \
+            if [ ! -f docker-compose.yml ]; then \
+              echo '❌ Error: docker-compose.yml not found after bootstrap!' && \
+              exit 1; \
+            fi && \
+            echo '✓ Bootstrap complete: Repository ready for deployment'"
           
           # Execute deployment script on server
           echo "🚀 Executing deployment script on server..."
