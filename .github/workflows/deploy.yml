@@ -54,7 +54,93 @@ jobs:
       - name: Create required directories
         run: |
           mkdir -p storage
-          mkdir -p logs  # FIXED: Create logs directory for Django logging
+          mkdir -p logs  # Create logs directory for Django logging
+
+      - name: Check repository structure
+        run: |
+          echo "🔍 Checking repository structure..."
+          
+          # Check for required files
+          REQUIRED_FILES=(
+            "scripts/deploy.sh"
+            "docker-compose.yml"
+            "Dockerfile"
+            "code/requirements.txt"
+            "code/manage.py"
+            "code/main/settings.py"
+          )
+          
+          MISSING_FILES=()
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              MISSING_FILES+=("$file")
+              echo "❌ Missing required file: $file"
+            else
+              echo "✓ Found: $file"
+            fi
+          done
+          
+          if [ ${#MISSING_FILES[@]} -ne 0 ]; then
+            echo "❌ Error: Missing required files: ${MISSING_FILES[*]}"
+            exit 1
+          fi
+          
+          # Check for required directories
+          REQUIRED_DIRS=(
+            "code"
+            "config"
+            "docker"
+          )
+          
+          MISSING_DIRS=()
+          for dir in "${REQUIRED_DIRS[@]}"; do
+            if [ ! -d "$dir" ]; then
+              MISSING_DIRS+=("$dir")
+              echo "❌ Missing required directory: $dir"
+            else
+              echo "✓ Found: $dir"
+            fi
+          done
+          
+          if [ ${#MISSING_DIRS[@]} -ne 0 ]; then
+            echo "❌ Error: Missing required directories: ${MISSING_DIRS[*]}"
+            exit 1
+          fi
+          
+          # Verify deploy script is executable or at least exists
+          if [ ! -x "scripts/deploy.sh" ] && [ -f "scripts/deploy.sh" ]; then
+            echo "⚠ Warning: scripts/deploy.sh is not executable"
+          fi
+          
+          # Check git repository validity
+          if [ ! -d ".git" ]; then
+            echo "❌ Error: Not a valid git repository"
+            exit 1
+          fi
+          
+          if ! git rev-parse --git-dir > /dev/null 2>&1; then
+            echo "❌ Error: Git repository is corrupted"
+            exit 1
+          fi
+          
+          echo "✓ Repository structure is valid"
+
+      - name: Check Docker configuration
+        run: |
+          echo "🔍 Checking Docker configuration..."
+          
+          # Check Dockerfile syntax (basic check)
+          if ! grep -q "FROM" Dockerfile 2>/dev/null; then
+            echo "❌ Error: Dockerfile appears to be invalid (no FROM statement)"
+            exit 1
+          fi
+          
+          # Check docker-compose.yml is valid YAML (basic check)
+          if ! grep -q "version:" docker-compose.yml 2>/dev/null && ! grep -q "services:" docker-compose.yml 2>/dev/null; then
+            echo "⚠ Warning: docker-compose.yml might be invalid"
+          fi
+          
+          echo "✓ Docker configuration looks valid"
 
       - name: Run Django checks
         env:
@@ -150,7 +236,7 @@ jobs:
             GIT_BRANCH='main' && \
             echo '📦 Backing up important directories...' && \
             BACKUP_DIR=\$(mktemp -d) && \
-            for dir in config storage docker; do \
+            for dir in config storage docker logs; do \
               if [ -d \"\$dir\" ]; then \
                 cp -r \"\$dir\" \"\$BACKUP_DIR/\" 2>/dev/null || true && \
                 echo \"  ✓ Backed up \$dir\"; \
@@ -184,7 +270,7 @@ jobs:
             fi && \
             if [ -d \"\$BACKUP_DIR\" ]; then \
               echo '📦 Restoring important directories...' && \
-              for dir in config storage docker; do \
+              for dir in config storage docker logs; do \
                 if [ -d \"\$BACKUP_DIR/\$dir\" ]; then \
                   if [ -d \"\$dir\" ]; then \
                     cp -rn \"\$BACKUP_DIR/\$dir\"/* \"\$dir/\" 2>/dev/null || true && \
@@ -196,16 +282,6 @@ jobs:
                 fi; \
               done && \
               rm -rf \"\$BACKUP_DIR\"; \
-            fi && \
-            if [ ! -f scripts/deploy.sh ]; then \
-              echo '❌ Error: scripts/deploy.sh not found after bootstrap!' && \
-              echo 'Directory contents:' && \
-              ls -la && \
-              exit 1; \
-            fi && \
-            if [ ! -f docker-compose.yml ]; then \
-              echo '❌ Error: docker-compose.yml not found after bootstrap!' && \
-              exit 1; \
             fi && \
             echo '✓ Bootstrap complete: Repository ready for deployment'"
           
@@ -237,3 +313,7 @@ jobs:
           echo ""
           echo "📝 Recent deployment logs:"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && tail -50 logs/deployment_*.log | tail -50" || true
+          
+          echo ""
+          echo "📝 Application logs:"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && tail -20 logs/payments.log 2>/dev/null || echo 'No payments.log found'" || true

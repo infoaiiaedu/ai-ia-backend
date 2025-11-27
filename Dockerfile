@@ -37,7 +37,8 @@ RUN apk add --no-cache \
     libjpeg-turbo
 
 # Create necessary directories with proper permissions
-RUN mkdir -p /app/storage /app/logs /app/cache && \
+# Note: We don't create /app/logs here since it will be mounted from host
+RUN mkdir -p /app/storage /app/cache && \
     chown -R app:app /app && \
     chmod -R 755 /app
 
@@ -52,8 +53,7 @@ COPY ./code /app/code
 # Set proper permissions for the entire app directory
 RUN chown -R app:app /app && \
     chmod -R 755 /app && \
-    chmod -R 775 /app/storage && \
-    chmod -R 775 /app/logs
+    chmod -R 775 /app/storage
 
 USER app
 
@@ -61,10 +61,10 @@ USER app
 RUN echo '#!/bin/sh\n\
 set -e\n\
 echo "Creating storage directories..."\n\
-mkdir -p /app/storage /app/logs /app/cache\n\
+mkdir -p /app/storage /app/cache\n\
 echo "Setting permissions..."\n\
 chmod -R 755 /app\n\
-chmod -R 775 /app/storage /app/logs\n\
+chmod -R 775 /app/storage\n\
 echo "Waiting for Postgres..."\n\
 TIMEOUT=60\n\
 ELAPSED=0\n\

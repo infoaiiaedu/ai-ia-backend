@@ -684,7 +684,6 @@ log ""
 log "Step 7/7: Running health checks..."
 
 # Check containers
-CONTAINERS_OK=true
 
 # Check app container
 if docker ps --format "{{.Names}}" | grep -q "^main_app$"; then
@@ -693,11 +692,11 @@ if docker ps --format "{{.Names}}" | grep -q "^main_app$"; then
         success "App container is running"
     else
         error "App container exists but status is: $APP_STATUS"
-        CONTAINERS_OK=false
+        fail "App container is not running (status: $APP_STATUS). Deployment failed."
     fi
 else
     error "App container (main_app) is NOT running"
-    CONTAINERS_OK=false
+    fail "App container (main_app) is not running. Deployment failed."
 fi
 
 # Check PostgreSQL container
@@ -707,11 +706,11 @@ if docker ps --format "{{.Names}}" | grep -q "^ai_psql$"; then
         success "PostgreSQL container is running"
     else
         error "PostgreSQL container exists but status is: $PSQL_STATUS"
-        CONTAINERS_OK=false
+        fail "PostgreSQL container is not running (status: $PSQL_STATUS). Deployment failed."
     fi
 else
     error "PostgreSQL container (ai_psql) is NOT running"
-    CONTAINERS_OK=false
+    fail "PostgreSQL container (ai_psql) is not running. Deployment failed."
 fi
 
 # Check Redis container
@@ -721,11 +720,11 @@ if docker ps --format "{{.Names}}" | grep -q "^ai_redis$"; then
         success "Redis container is running"
     else
         error "Redis container exists but status is: $REDIS_STATUS"
-        CONTAINERS_OK=false
+        fail "Redis container is not running (status: $REDIS_STATUS). Deployment failed."
     fi
 else
     error "Redis container (ai_redis) is NOT running"
-    CONTAINERS_OK=false
+    fail "Redis container (ai_redis) is not running. Deployment failed."
 fi
 
 # Check search container
@@ -746,50 +745,44 @@ if docker ps --format "{{.Names}}" | grep -q "^ai_nginx$"; then
     if [ "$NGINX_STATUS" = "running" ]; then
         success "Nginx container is running"
     else
-        warn "Nginx container exists but status is: $NGINX_STATUS"
+        error "Nginx container exists but status is: $NGINX_STATUS"
+        fail "Nginx container is not running (status: $NGINX_STATUS). Deployment failed."
     fi
 else
-    warn "Nginx container is not running (may be optional)"
+    error "Nginx container is not running"
+    fail "Nginx container (ai_nginx) is not running. Deployment failed."
 fi
 
 # Application endpoint check
 log "Testing application health endpoint..."
 HEALTH_CHECK_COUNT=0
 HEALTH_CHECK_MAX=30
+HEALTH_CHECK_PASSED=false
 while [ $HEALTH_CHECK_COUNT -lt $HEALTH_CHECK_MAX ]; do
     if curl -f -s http://localhost:5000/ > /dev/null 2>&1; then
         success "Application is responding on port 5000"
+        HEALTH_CHECK_PASSED=true
         break
     fi
     HEALTH_CHECK_COUNT=$((HEALTH_CHECK_COUNT + 1))
-    if [ $HEALTH_CHECK_COUNT -eq $HEALTH_CHECK_MAX ]; then
-        warn "Application health check timed out. App may still be starting up."
-    fi
     sleep 1
 done
+if [ "$HEALTH_CHECK_PASSED" = false ]; then
+    error "Application health check timed out after ${HEALTH_CHECK_MAX} seconds"
+    fail "Application is not responding on port 5000. Deployment failed."
+fi
 
 # Display final status
 log ""
 log "Final container status:"
 docker compose -f "$DOCKER_COMPOSE_FILE" ps | tee -a "$LOG_FILE"
 
-# Final summary
-if [ "$CONTAINERS_OK" = true ]; then
-    echo ""
-    echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║  ✓ Deployment completed successfully!  ║${NC}"
-    echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
-    echo ""
-    log "Deployment finished successfully"
-    log "Logs saved to: $LOG_FILE"
-    log "Backup saved to: $BACKUP_DIR"
-else
-    echo ""
-    echo -e "${YELLOW}╔════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║  ⚠ Deployment completed with warnings  ║${NC}"
-    echo -e "${YELLOW}╚════════════════════════════════════════╝${NC}"
-    echo ""
-    log "Deployment finished with warnings"
-    log "Logs saved to: $LOG_FILE"
-    log "Please check container logs: docker compose logs"
-fi
+# Final summary - if we reach here, all critical checks passed
+echo ""
+echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║  ✓ Deployment completed successfully!  ║${NC}"
+echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
+echo ""
+log "Deployment finished successfully"
+log "Logs saved to: $LOG_FILE"
+log "Backup saved to: $BACKUP_DIR"
