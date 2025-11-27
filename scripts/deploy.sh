@@ -14,6 +14,7 @@ LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/deployment_$(date +%Y%m%d_%H%M%S).log"
 BACKUP_DIR="${PROJECT_DIR}/.backups"
 GIT_BRANCH="${GIT_BRANCH:-main}"
+GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/infoaiiaedu/ai-ia-backend.git}"
 DOCKER_COMPOSE_FILE="${PROJECT_DIR}/docker-compose.yml"
 MAX_LOGS="${MAX_DEPLOY_LOGS:-10}"
 MAX_BACKUPS="${MAX_DEPLOY_BACKUPS:-3}"
@@ -218,6 +219,105 @@ verify_prerequisites() {
     success "docker-compose.yml found"
 }
 
+# Ensure git repository exists
+ensure_git_repo() {
+    log "Checking if git repository exists..."
+    
+    cd "$PROJECT_DIR"
+    
+    if [ ! -d ".git" ]; then
+        warn "Git repository not found. Initializing/cloning repository..."
+        
+        # Check if essential files exist (if they do, we'll try to init git; if not, we'll clone)
+        local needs_clone=false
+        if [ ! -f "docker-compose.yml" ] && [ ! -f "Dockerfile" ] && [ ! -d "code" ] && [ ! -d "scripts" ]; then
+            needs_clone=true
+        fi
+        
+        if [ "$needs_clone" = true ]; then
+            log "Directory appears empty or incomplete. Cloning repository..."
+            
+            # Backup existing directories that should be preserved
+            local backup_dir=$(mktemp -d)
+            for dir in config storage docker; do
+                if [ -d "$dir" ]; then
+                    log "Backing up existing $dir directory..."
+                    mv "$dir" "$backup_dir/" 2>/dev/null || true
+                fi
+            done
+            
+            # Clone to a temporary location first
+            local temp_clone=$(mktemp -d)
+            log "Cloning repository from $GIT_REPO_URL..."
+            if ! git clone -b "$GIT_BRANCH" --single-branch --depth 1 "$GIT_REPO_URL" "$temp_clone" 2>&1 | tee -a "$LOG_FILE"; then
+                # Restore backups on failure
+                if [ -d "$backup_dir" ]; then
+                    mv "$backup_dir"/* "$PROJECT_DIR/" 2>/dev/null || true
+                fi
+                fail "Failed to clone repository from $GIT_REPO_URL"
+            fi
+            
+            # Move all files from clone to project directory
+            log "Moving files to project directory..."
+            shopt -s dotglob
+            mv "$temp_clone"/* "$PROJECT_DIR/" 2>/dev/null || true
+            shopt -u dotglob
+            rm -rf "$temp_clone"
+            
+            # Restore backed up directories
+            if [ -d "$backup_dir" ]; then
+                for dir in config storage docker; do
+                    if [ -d "$backup_dir/$dir" ]; then
+                        log "Restoring $dir directory..."
+                        if [ -d "$PROJECT_DIR/$dir" ]; then
+                            # Merge if both exist
+                            cp -r "$backup_dir/$dir"/* "$PROJECT_DIR/$dir/" 2>/dev/null || true
+                        else
+                            mv "$backup_dir/$dir" "$PROJECT_DIR/" 2>/dev/null || true
+                        fi
+                    fi
+                done
+                rm -rf "$backup_dir"
+            fi
+            
+            success "Repository cloned successfully"
+        else
+            # Directory has some files, try to initialize git and pull
+            log "Initializing git repository in existing directory..."
+            git init
+            git remote add origin "$GIT_REPO_URL" 2>/dev/null || git remote set-url origin "$GIT_REPO_URL"
+            
+            # Fetch and reset to match remote
+            log "Fetching from remote..."
+            if ! git fetch origin "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
+                fail "Failed to fetch from git remote"
+            fi
+            
+            # Create branch and reset to remote
+            git checkout -b "$GIT_BRANCH" 2>/dev/null || git checkout "$GIT_BRANCH" 2>/dev/null || true
+            if ! git reset --hard "origin/$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
+                warn "Git reset had issues, but continuing..."
+            fi
+            
+            success "Git repository initialized and synced"
+        fi
+    else
+        # Verify remote is set correctly
+        if ! git remote get-url origin >/dev/null 2>&1; then
+            log "Git remote not configured. Setting remote..."
+            git remote add origin "$GIT_REPO_URL" || git remote set-url origin "$GIT_REPO_URL"
+        else
+            # Update remote URL in case it changed
+            local current_url=$(git remote get-url origin 2>/dev/null || echo "")
+            if [ "$current_url" != "$GIT_REPO_URL" ]; then
+                log "Updating git remote URL..."
+                git remote set-url origin "$GIT_REPO_URL"
+            fi
+        fi
+        success "Git repository found"
+    fi
+}
+
 # Handle git conflicts
 handle_git_conflicts() {
     log "Checking for git conflicts..."
@@ -251,7 +351,24 @@ log "Project directory: $PROJECT_DIR"
 log "Target branch: $GIT_BRANCH"
 log "Docker compose file: $DOCKER_COMPOSE_FILE"
 
-# Verify prerequisites
+cd "$PROJECT_DIR"
+
+# ============================
+# Git Operations (must happen first)
+# ============================
+
+log ""
+log "========== GIT OPERATIONS =========="
+log "Step 1/7: Ensuring git repository exists..."
+ensure_git_repo
+
+# Now that we're sure the repo exists, update PROJECT_DIR paths
+# (in case we cloned into a different structure)
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+DOCKER_COMPOSE_FILE="${PROJECT_DIR}/docker-compose.yml"
+cd "$PROJECT_DIR"
+
+# Verify prerequisites (after ensuring repo exists)
 verify_prerequisites
 
 # Check disk space
@@ -270,18 +387,16 @@ check_config_file
 # Create backup
 create_backup
 
-cd "$PROJECT_DIR"
-
 # ============================
-# Git Operations
+# Git Operations (continued)
 # ============================
 
 log ""
-log "========== GIT OPERATIONS =========="
-log "Step 1/6: Handling git conflicts..."
+log "========== GIT OPERATIONS (continued) =========="
+log "Step 2/7: Handling git conflicts..."
 handle_git_conflicts
 
-log "Step 2/6: Pulling latest code from git..."
+log "Step 3/6: Pulling latest code from git..."
 if ! git fetch origin "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
     fail "Failed to fetch from git remote"
 fi
@@ -298,7 +413,7 @@ success "Code pulled successfully from $GIT_BRANCH"
 log ""
 log "========== DOCKER OPERATIONS =========="
 
-log "Step 3/6: Stopping containers gracefully..."
+log "Step 4/6: Stopping containers gracefully..."
 STOP_ATTEMPT=0
 STOP_MAX=3
 while [ $STOP_ATTEMPT -lt $STOP_MAX ]; do
@@ -318,13 +433,13 @@ if [ $STOP_ATTEMPT -eq $STOP_MAX ]; then
     docker compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans 2>&1 | tee -a "$LOG_FILE" || true
 fi
 
-log "Step 4/6: Building Docker images (this may take several minutes)..."
+log "Step 5/6: Building Docker images (this may take several minutes)..."
 if ! docker compose -f "$DOCKER_COMPOSE_FILE" build --no-cache 2>&1 | tee -a "$LOG_FILE"; then
     fail "Failed to build Docker images"
 fi
 success "Docker images built successfully"
 
-log "Step 5/6: Starting containers..."
+log "Step 6/6: Starting containers..."
 if ! docker compose -f "$DOCKER_COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"; then
     fail "Failed to start containers"
 fi
@@ -482,7 +597,7 @@ fi
 # ============================
 
 log ""
-log "Step 6/6: Running health checks..."
+log "Step 7/7: Running health checks..."
 
 # Check containers
 CONTAINERS_OK=true
