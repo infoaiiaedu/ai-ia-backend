@@ -51,6 +51,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r code/requirements.txt
 
+      - name: Create required directories
+        run: mkdir -p storage
+
       - name: Run Django checks
         env:
           DEBUG: "true"

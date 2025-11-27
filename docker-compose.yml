@@ -22,6 +22,11 @@ services:
       - ai_network
     ports:
       - "5000:5000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     image: redis:7.2.4-alpine3.19
@@ -33,6 +38,11 @@ services:
       - ./docker/redis/redis.conf:/docker/redis/redis.conf
     networks:
       - ai_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   psql:
     image: postgres:16-alpine
@@ -46,6 +56,11 @@ services:
       - ./storage/db/pgdata:/var/lib/postgresql/data
     networks:
       - ai_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   nginx:
     image: nginx:1.25-alpine
@@ -63,6 +78,11 @@ services:
       - app
     networks:
       - ai_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   search:
     image: getmeili/meilisearch:v1.1
@@ -72,6 +92,11 @@ services:
       - ./storage/ai_search:/meili_data
     networks:
       - ai_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   certbot:
     image: certbot/certbot:latest
@@ -84,6 +109,11 @@ services:
       - nginx
     networks:
       - ai_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "1"
 
 volumes:
   redis-data:

@@ -35,8 +35,8 @@ RUN apk add --no-cache \
     ghostscript \
     libjpeg-turbo
 
-# Create necessary dirs
-RUN mkdir -p logs cache
+# Create necessary dirs (logs, cache, storage for app logs)
+RUN mkdir -p logs cache /app/storage
 
 # Copy Python wheels and install
 COPY --from=builder /usr/src/app/wheels /wheels

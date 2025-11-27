@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Ensure storage directory exists (for logging)
+echo "Creating storage directories..."
+mkdir -p /app/storage
+
 # Wait for Postgres
 echo "Waiting for Postgres..."
 until pg_isready -h psql -U postgres; do
