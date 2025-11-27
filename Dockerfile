@@ -47,14 +47,10 @@ RUN pip install --upgrade pip \
 # Copy application code
 COPY ./code /app/code
 
-# Copy entrypoint script
-COPY ./entry.sh /shared/entry.sh
-RUN chmod +x /shared/entry.sh
-
 # Set permissions
 RUN chown -R app:app /app
 
 USER app
 
-# Default command
-CMD ["/bin/sh", "/shared/entry.sh"]
+# Default command (matches docker-compose.yml)
+CMD ["/bin/sh", "-c", "set -e && echo 'Creating storage directories...' && mkdir -p /app/storage && echo 'Waiting for Postgres...' && TIMEOUT=60 && ELAPSED=0 && until pg_isready -h psql -U postgres; do sleep 2 && ELAPSED=$((ELAPSED + 2)) && if [ $ELAPSED -ge $TIMEOUT ]; then echo 'ERROR: PostgreSQL not ready after '$TIMEOUT's - exiting' && exit 1; fi && echo 'Waiting... ('$ELAPSED's/'$TIMEOUT's)'; done && echo 'Postgres is ready!' && echo 'Applying migrations...' && python manage.py migrate --noinput && echo 'Collecting static files...' && python manage.py collectstatic --noinput --no-post-process && echo 'Starting Gunicorn...' && exec gunicorn main.wsgi:application --bind 0.0.0.0:5000 --workers 2 --threads 2 --log-level info"]
