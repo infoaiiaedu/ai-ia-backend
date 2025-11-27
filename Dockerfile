@@ -29,6 +29,7 @@ ENV PYTHONPATH="/app/code"
 # Install runtime dependencies
 RUN apk add --no-cache \
     bash \
+    wget \
     postgresql-client \
     netcat-openbsd \
     imagemagick \

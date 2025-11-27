@@ -70,7 +70,7 @@ services:
     networks:
       - ai_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_db}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_db"]
       interval: 10s
       timeout: 5s
       retries: 5
