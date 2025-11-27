@@ -684,73 +684,75 @@ log ""
 log "Step 7/7: Running health checks..."
 
 # Check containers
+# Use docker ps -a to see all containers including restarting ones
+HEALTH_CHECK_FAILED=false
 
 # Check app container
-if docker ps --format "{{.Names}}" | grep -q "^main_app$"; then
+if docker ps -a --format "{{.Names}}" | grep -q "^main_app$"; then
     APP_STATUS=$(docker inspect -f '{{.State.Status}}' main_app 2>/dev/null || echo "unknown")
     if [ "$APP_STATUS" = "running" ]; then
         success "App container is running"
     else
         error "App container exists but status is: $APP_STATUS"
-        fail "App container is not running (status: $APP_STATUS). Deployment failed."
+        HEALTH_CHECK_FAILED=true
     fi
 else
-    error "App container (main_app) is NOT running"
-    fail "App container (main_app) is not running. Deployment failed."
+    error "App container (main_app) is NOT found"
+    HEALTH_CHECK_FAILED=true
 fi
 
 # Check PostgreSQL container
-if docker ps --format "{{.Names}}" | grep -q "^ai_psql$"; then
+if docker ps -a --format "{{.Names}}" | grep -q "^ai_psql$"; then
     PSQL_STATUS=$(docker inspect -f '{{.State.Status}}' ai_psql 2>/dev/null || echo "unknown")
     if [ "$PSQL_STATUS" = "running" ]; then
         success "PostgreSQL container is running"
     else
         error "PostgreSQL container exists but status is: $PSQL_STATUS"
-        fail "PostgreSQL container is not running (status: $PSQL_STATUS). Deployment failed."
+        HEALTH_CHECK_FAILED=true
     fi
 else
-    error "PostgreSQL container (ai_psql) is NOT running"
-    fail "PostgreSQL container (ai_psql) is not running. Deployment failed."
+    error "PostgreSQL container (ai_psql) is NOT found"
+    HEALTH_CHECK_FAILED=true
 fi
 
 # Check Redis container
-if docker ps --format "{{.Names}}" | grep -q "^ai_redis$"; then
+if docker ps -a --format "{{.Names}}" | grep -q "^ai_redis$"; then
     REDIS_STATUS=$(docker inspect -f '{{.State.Status}}' ai_redis 2>/dev/null || echo "unknown")
     if [ "$REDIS_STATUS" = "running" ]; then
         success "Redis container is running"
     else
         error "Redis container exists but status is: $REDIS_STATUS"
-        fail "Redis container is not running (status: $REDIS_STATUS). Deployment failed."
+        HEALTH_CHECK_FAILED=true
     fi
 else
-    error "Redis container (ai_redis) is NOT running"
-    fail "Redis container (ai_redis) is not running. Deployment failed."
+    error "Redis container (ai_redis) is NOT found"
+    HEALTH_CHECK_FAILED=true
 fi
 
-# Check search container
-if docker ps --format "{{.Names}}" | grep -q "^ai-search$"; then
+# Check search container (optional)
+if docker ps -a --format "{{.Names}}" | grep -q "^ai-search$"; then
     SEARCH_STATUS=$(docker inspect -f '{{.State.Status}}' ai-search 2>/dev/null || echo "unknown")
     if [ "$SEARCH_STATUS" = "running" ]; then
         success "Search container is running"
     else
-        warn "Search container exists but status is: $SEARCH_STATUS"
+        warn "Search container exists but status is: $SEARCH_STATUS (optional service)"
     fi
 else
-    warn "Search container (ai-search) is not running (may be optional)"
+    warn "Search container (ai-search) is not found (may be optional)"
 fi
 
 # Check nginx container
-if docker ps --format "{{.Names}}" | grep -q "^ai_nginx$"; then
+if docker ps -a --format "{{.Names}}" | grep -q "^ai_nginx$"; then
     NGINX_STATUS=$(docker inspect -f '{{.State.Status}}' ai_nginx 2>/dev/null || echo "unknown")
     if [ "$NGINX_STATUS" = "running" ]; then
         success "Nginx container is running"
     else
         error "Nginx container exists but status is: $NGINX_STATUS"
-        fail "Nginx container is not running (status: $NGINX_STATUS). Deployment failed."
+        HEALTH_CHECK_FAILED=true
     fi
 else
-    error "Nginx container is not running"
-    fail "Nginx container (ai_nginx) is not running. Deployment failed."
+    error "Nginx container (ai_nginx) is NOT found"
+    HEALTH_CHECK_FAILED=true
 fi
 
 # Application endpoint check
@@ -769,7 +771,16 @@ while [ $HEALTH_CHECK_COUNT -lt $HEALTH_CHECK_MAX ]; do
 done
 if [ "$HEALTH_CHECK_PASSED" = false ]; then
     error "Application health check timed out after ${HEALTH_CHECK_MAX} seconds"
-    fail "Application is not responding on port 5000. Deployment failed."
+    HEALTH_CHECK_FAILED=true
+fi
+
+# Fail deployment if any health check failed
+if [ "$HEALTH_CHECK_FAILED" = true ]; then
+    log ""
+    log "Final container status:"
+    docker compose -f "$DOCKER_COMPOSE_FILE" ps | tee -a "$LOG_FILE"
+    log ""
+    fail "Health checks failed. One or more containers are not running properly. Deployment failed."
 fi
 
 # Display final status

@@ -300,13 +300,80 @@ jobs:
             echo '✓ Bootstrap complete: Repository ready for deployment'"
           
           # Execute deployment script on server
+          # Capture exit code to ensure workflow fails on deployment failure
           echo "🚀 Executing deployment script on server..."
+          set +e
           ssh $SSH_OPTS \
              "$DEPLOY_USER@$DEPLOY_HOST" \
              "cd $DEPLOY_PATH && MAX_DEPLOY_LOGS=$MAX_DEPLOY_LOGS MAX_DEPLOY_BACKUPS=$MAX_DEPLOY_BACKUPS MIN_FREE_SPACE_KB=$MIN_FREE_SPACE_KB DISABLE_DEPLOY_BACKUP=$DISABLE_DEPLOY_BACKUP bash scripts/deploy.sh"
+          DEPLOY_EXIT_CODE=$?
+          set -e
+          
+          if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
+            echo "❌ Deployment script exited with code $DEPLOY_EXIT_CODE"
+            exit $DEPLOY_EXIT_CODE
+          fi
 
 
-      - name: Verify deployment
+      - name: Verify deployment health checks
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          # Create SSH key file
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=6 -o ConnectTimeout=10 -o ConnectionAttempts=5 -o StrictHostKeyChecking=accept-new"
+          
+          echo "🔍 Verifying container health status..."
+          HEALTH_CHECK_FAILED=false
+          
+          # Check each critical container
+          CRITICAL_CONTAINERS=("main_app" "ai_psql" "ai_redis" "ai_nginx")
+          
+          for container in "${CRITICAL_CONTAINERS[@]}"; do
+            CONTAINER_STATUS=$(ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && docker inspect -f '{{.State.Status}}' $container 2>/dev/null || echo 'not_found'")
+            
+            if [ "$CONTAINER_STATUS" = "running" ]; then
+              echo "✓ $container is running"
+            elif [ "$CONTAINER_STATUS" = "not_found" ]; then
+              echo "❌ $container is not found"
+              HEALTH_CHECK_FAILED=true
+            else
+              echo "❌ $container status is: $CONTAINER_STATUS (expected: running)"
+              HEALTH_CHECK_FAILED=true
+            fi
+          done
+          
+          # Check application health endpoint
+          echo "🔍 Checking application health endpoint..."
+          APP_HEALTH=$(ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "curl -f -s -o /dev/null -w '%{http_code}' http://localhost:5000/ 2>/dev/null || echo '000'")
+          
+          if [ "$APP_HEALTH" = "200" ] || [ "$APP_HEALTH" = "301" ] || [ "$APP_HEALTH" = "302" ]; then
+            echo "✓ Application is responding (HTTP $APP_HEALTH)"
+          else
+            echo "❌ Application health check failed (HTTP $APP_HEALTH)"
+            HEALTH_CHECK_FAILED=true
+          fi
+          
+          if [ "$HEALTH_CHECK_FAILED" = true ]; then
+            echo ""
+            echo "📊 Final container status:"
+            ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && docker compose ps" || true
+            echo ""
+            echo "❌ Health checks failed. Deployment verification failed."
+            exit 1
+          else
+            echo ""
+            echo "✓ All health checks passed!"
+          fi
+
+      - name: Verify deployment (logs)
         if: always()
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
@@ -320,13 +387,14 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           
-          echo "📊 Final container status:"
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=6 -o ConnectTimeout=10 -o ConnectionAttempts=5 -o StrictHostKeyChecking=accept-new"
+          
+          echo "📊 Final container status:"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && docker compose ps" || true
           
           echo ""
           echo "📝 Recent deployment logs:"
-          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && tail -50 logs/deployment_*.log | tail -50" || true
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && ls -t logs/deployment_*.log 2>/dev/null | head -1 | xargs tail -50 2>/dev/null || echo 'No deployment logs found'" || true
           
           echo ""
           echo "📝 Application logs:"
