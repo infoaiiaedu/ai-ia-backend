@@ -50,21 +50,18 @@ RUN pip install --upgrade pip \
 # Copy application code
 COPY ./code /app/code
 
-# Set proper permissions for the entire app directory
-RUN chown -R app:app /app && \
+# Create logs directory and set proper permissions for the entire app directory
+RUN mkdir -p /app/code/logs && \
+    chown -R app:app /app && \
     chmod -R 755 /app && \
-    chmod -R 775 /app/storage
+    chmod -R 775 /app/storage && \
+    chmod -R 775 /app/code/logs
 
-USER app
-
-# Create entrypoint script to handle initialization
+# Create entrypoint script to handle initialization (before switching user)
 RUN echo '#!/bin/sh\n\
 set -e\n\
 echo "Creating storage directories..."\n\
-mkdir -p /app/storage /app/cache\n\
-echo "Setting permissions..."\n\
-chmod -R 755 /app\n\
-chmod -R 775 /app/storage\n\
+mkdir -p /app/storage /app/cache /app/code/logs\n\
 echo "Waiting for Postgres..."\n\
 TIMEOUT=60\n\
 ELAPSED=0\n\
@@ -84,6 +81,8 @@ echo "Collecting static files..."\n\
 python manage.py collectstatic --noinput --no-post-process\n\
 echo "Starting Gunicorn..."\n\
 exec gunicorn main.wsgi:application --bind 0.0.0.0:5000 --workers 2 --threads 2 --log-level info\n\
-' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh && chown app:app /app/entrypoint.sh
+
+USER app
 
 CMD ["/app/entrypoint.sh"]
