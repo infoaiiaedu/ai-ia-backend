@@ -343,6 +343,178 @@ handle_git_conflicts() {
     success "Git state cleaned up"
 }
 
+# Safely re-clone repository (removes old files and clones fresh)
+safe_reclone_repository() {
+    log "Starting safe repository re-clone..."
+    
+    cd "$PROJECT_DIR"
+    
+    # List of directories/files to preserve
+    PRESERVE_DIRS=("logs" "storage" "config" "docker" ".backups")
+    PRESERVE_FILES=()
+    
+    # Create temporary backup directory
+    BACKUP_TEMP=$(mktemp -d)
+    BACKUP_SUCCESS=true
+    
+    log "Backing up important directories and files..."
+    for dir in "${PRESERVE_DIRS[@]}"; do
+        if [ -d "$dir" ] || [ -e "$dir" ]; then
+            log "Backing up $dir..."
+            if cp -r "$dir" "$BACKUP_TEMP/" 2>/dev/null; then
+                success "Backed up $dir"
+            else
+                warn "Failed to backup $dir (may not exist or be empty)"
+            fi
+        fi
+    done
+    
+    for file in "${PRESERVE_FILES[@]}"; do
+        if [ -f "$file" ]; then
+            log "Backing up $file..."
+            cp "$file" "$BACKUP_TEMP/" 2>/dev/null || warn "Failed to backup $file"
+        fi
+    done
+    
+    # Also preserve docker-compose.yml if it has local modifications (but we'll restore from backup)
+    if [ -f "docker-compose.yml" ]; then
+        cp "docker-compose.yml" "$BACKUP_TEMP/docker-compose.yml.local" 2>/dev/null || true
+    fi
+    
+    # Verify backup was created
+    if [ ! -d "$BACKUP_TEMP" ] || [ -z "$(ls -A "$BACKUP_TEMP" 2>/dev/null)" ]; then
+        warn "Backup directory is empty, but continuing..."
+    fi
+    
+    log "Removing old repository files (preserving important directories)..."
+    
+    # Remove everything except preserved directories
+    # First, move preserved dirs to a safe location temporarily
+    PRESERVE_TEMP=$(mktemp -d)
+    PRESERVE_TEMP_NAME=$(basename "$PRESERVE_TEMP")
+    BACKUP_TEMP_NAME=$(basename "$BACKUP_TEMP")
+    
+    for dir in "${PRESERVE_DIRS[@]}"; do
+        if [ -d "$dir" ] || [ -e "$dir" ]; then
+            mv "$dir" "$PRESERVE_TEMP/" 2>/dev/null || true
+        fi
+    done
+    
+    # Remove all other files and directories (including .git)
+    # But exclude the temporary directories we're using
+    log "Removing old repository..."
+    for item in * .*; do
+        # Skip . and .., and our temp directories
+        if [ "$item" = "." ] || [ "$item" = ".." ]; then
+            continue
+        fi
+        if [ "$item" = "$PRESERVE_TEMP_NAME" ] || [ "$item" = "$BACKUP_TEMP_NAME" ]; then
+            continue
+        fi
+        # Remove everything else
+        rm -rf "$item" 2>/dev/null || true
+    done
+    
+    # Clone fresh repository
+    log "Cloning fresh repository from $GIT_REPO_URL (branch: $GIT_BRANCH)..."
+    TEMP_CLONE=$(mktemp -d)
+    
+    if ! git clone -b "$GIT_BRANCH" --single-branch --depth 1 "$GIT_REPO_URL" "$TEMP_CLONE" 2>&1 | tee -a "$LOG_FILE"; then
+        error "Failed to clone repository"
+        # Try to restore preserved directories
+        if [ -d "$PRESERVE_TEMP" ]; then
+            mv "$PRESERVE_TEMP"/* "$PROJECT_DIR/" 2>/dev/null || true
+        fi
+        rm -rf "$TEMP_CLONE" "$PRESERVE_TEMP" "$BACKUP_TEMP"
+        fail "Repository re-clone failed"
+    fi
+    
+    # Move all files from clone to project directory
+    log "Moving cloned files to project directory..."
+    shopt -s dotglob
+    mv "$TEMP_CLONE"/* "$PROJECT_DIR/" 2>/dev/null || true
+    shopt -u dotglob
+    rm -rf "$TEMP_CLONE"
+    
+    # Restore preserved directories
+    log "Restoring preserved directories..."
+    if [ -d "$PRESERVE_TEMP" ]; then
+        for dir in "${PRESERVE_DIRS[@]}"; do
+            if [ -d "$PRESERVE_TEMP/$dir" ]; then
+                if [ -d "$PROJECT_DIR/$dir" ]; then
+                    # Merge: copy new files from backup, but keep existing structure
+                    log "Merging $dir with existing directory..."
+                    # Copy files from backup that don't exist in new clone, or merge configs
+                    if [ "$dir" = "config" ]; then
+                        # For config, we want to merge carefully
+                        cp -rn "$PRESERVE_TEMP/$dir"/* "$PROJECT_DIR/$dir/" 2>/dev/null || true
+                    elif [ "$dir" = "docker" ]; then
+                        # For docker, preserve certbot (SSL certificates) but use fresh structure
+                        if [ -d "$PRESERVE_TEMP/docker/certbot" ]; then
+                            log "Preserving SSL certificates from docker/certbot..."
+                            # Remove docker/certbot from new clone if it exists
+                            rm -rf "$PROJECT_DIR/docker/certbot" 2>/dev/null || true
+                            # Restore the preserved certbot directory
+                            mkdir -p "$PROJECT_DIR/docker"
+                            cp -r "$PRESERVE_TEMP/docker/certbot" "$PROJECT_DIR/docker/" 2>/dev/null || true
+                            success "SSL certificates preserved"
+                        fi
+                        # Note: nginx configs come from repo, but certbot data is preserved
+                    else
+                        # For logs, storage, .backups - just restore
+                        rm -rf "$PROJECT_DIR/$dir" 2>/dev/null || true
+                        mv "$PRESERVE_TEMP/$dir" "$PROJECT_DIR/" 2>/dev/null || true
+                    fi
+                else
+                    # Directory doesn't exist in new clone, just restore it
+                    mv "$PRESERVE_TEMP/$dir" "$PROJECT_DIR/" 2>/dev/null || true
+                fi
+            fi
+        done
+        rm -rf "$PRESERVE_TEMP"
+    fi
+    
+    # Also restore from backup temp if needed (for files that might have been modified)
+    if [ -d "$BACKUP_TEMP" ]; then
+        # Restore docker-compose.yml.local if it exists and docker-compose.yml from repo is different
+        if [ -f "$BACKUP_TEMP/docker-compose.yml.local" ] && [ -f "$PROJECT_DIR/docker-compose.yml" ]; then
+            # Compare and warn if different, but use repo version
+            if ! cmp -s "$BACKUP_TEMP/docker-compose.yml.local" "$PROJECT_DIR/docker-compose.yml" 2>/dev/null; then
+                warn "docker-compose.yml differs from repository version. Using repository version."
+                warn "Previous version backed up to: $BACKUP_TEMP/docker-compose.yml.local"
+            fi
+        fi
+    fi
+    
+    # Clean up backup temp (keep it for a bit in case of issues, but log location)
+    log "Backup preserved at: $BACKUP_TEMP (will be cleaned up on next successful deployment)"
+    
+    # Verify the clone was successful
+    if [ ! -d ".git" ]; then
+        fail "Repository re-clone completed but .git directory not found"
+    fi
+    
+    # Verify we're on the correct branch
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+    if [ "$CURRENT_BRANCH" != "$GIT_BRANCH" ]; then
+        warn "Cloned branch is $CURRENT_BRANCH, expected $GIT_BRANCH. Checking out correct branch..."
+        git checkout -B "$GIT_BRANCH" "origin/$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+    fi
+    
+    success "Repository re-cloned successfully"
+    
+    # Clean up old backup temp directories (keep only last 2)
+    if [ -d "$PROJECT_DIR/.backup_temps" ]; then
+        ls -1t "$PROJECT_DIR/.backup_temps" 2>/dev/null | tail -n +3 | xargs -r -I {} rm -rf "$PROJECT_DIR/.backup_temps/{}" 2>/dev/null || true
+    else
+        mkdir -p "$PROJECT_DIR/.backup_temps"
+    fi
+    
+    # Move current backup to .backup_temps for later cleanup
+    BACKUP_NAME="backup_$(date +%Y%m%d_%H%M%S)"
+    mv "$BACKUP_TEMP" "$PROJECT_DIR/.backup_temps/$BACKUP_NAME" 2>/dev/null || true
+}
+
 # ============================
 # Main Deployment
 # ============================
@@ -403,144 +575,32 @@ create_backup
 
 log ""
 log "========== GIT OPERATIONS (continued) =========="
-log "Step 2/7: Handling git conflicts and local changes..."
-handle_git_conflicts
+log "Step 2/7: Updating repository (using safe re-clone method)..."
 
-log "Step 3/7: Preparing repository for update..."
+# Use safe re-clone method to ensure clean state
+safe_reclone_repository
 
-# Ensure we're on the correct branch
-log "Ensuring we're on branch $GIT_BRANCH..."
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-if [ "$CURRENT_BRANCH" != "$GIT_BRANCH" ]; then
-    log "Current branch is $CURRENT_BRANCH, switching to $GIT_BRANCH..."
-    # Try to checkout the branch, creating it if it doesn't exist locally
-    git checkout -B "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
-fi
+log "Step 3/7: Verifying repository state..."
 
-# Abort any ongoing merge or rebase
-log "Aborting any ongoing merge or rebase..."
-git merge --abort 2>/dev/null || true
-git rebase --abort 2>/dev/null || true
-git cherry-pick --abort 2>/dev/null || true
-
-# Discard all local changes to tracked files (including staged changes)
-log "Discarding all local changes to tracked files..."
-git reset --hard HEAD 2>&1 | tee -a "$LOG_FILE" || true
-# Also unstage any files that might be in the index
-git reset HEAD . 2>&1 | tee -a "$LOG_FILE" || true
-git reset --hard HEAD 2>&1 | tee -a "$LOG_FILE" || true
-
-# Fetch latest changes
-log "Fetching latest code from git..."
-if ! git fetch origin "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
-    fail "Failed to fetch from git remote"
-fi
-
-# Check what files would be affected by the update
-log "Checking for files that would conflict with update..."
-CONFLICTING_FILES=$(git diff --name-only HEAD origin/"$GIT_BRANCH" 2>/dev/null || true)
-
-# Get list of files that exist in remote branch
-REMOTE_FILES=$(git ls-tree -r origin/"$GIT_BRANCH" --name-only 2>/dev/null || true)
-
-# Remove untracked files that would be overwritten by files in remote
-if [ -n "$REMOTE_FILES" ]; then
-    log "Checking for untracked files that would conflict with remote..."
-    UNTRACKED_CONFLICTS=$(git ls-files --others --exclude-standard 2>/dev/null || true)
-    if [ -n "$UNTRACKED_CONFLICTS" ]; then
-        for file in $UNTRACKED_CONFLICTS; do
-            # Check if this untracked file exists in the remote branch
-            if echo "$REMOTE_FILES" | grep -q "^$file$"; then
-                log "Removing untracked file that exists in remote: $file"
-                rm -f "$file" 2>/dev/null || true
-                # Also remove from git index if it's somehow tracked
-                git rm --cached "$file" 2>/dev/null || true
-            fi
-        done
-    fi
-fi
-
-# Clean up untracked files, but be careful with important directories
-log "Cleaning up untracked files..."
-# First, handle specific files that are known to cause conflicts
-for file in .github/workflows/deploy.yml Dockerfile code/jinja2/base.html code/main/settings.py docker-compose.yml code/templates/index.html; do
-    if [ -f "$file" ] && echo "$REMOTE_FILES" | grep -q "^$file$"; then
-        # This file exists locally and in remote, check if it's untracked
-        if ! git ls-files --error-unmatch "$file" >/dev/null 2>&1; then
-            log "Removing untracked file that conflicts with remote: $file"
-            rm -f "$file" 2>/dev/null || true
-            git rm --cached "$file" 2>/dev/null || true
-        fi
-    fi
-done
-
-# Clean up other untracked files, but preserve important directories
-# We'll do a selective clean to avoid removing logs, storage, config, etc.
-UNTRACKED_ALL=$(git ls-files --others --exclude-standard --directory 2>/dev/null || true)
-if [ -n "$UNTRACKED_ALL" ]; then
-    for item in $UNTRACKED_ALL; do
-        # Skip important directories and their contents
-        if [[ "$item" != logs/* && "$item" != storage/* && "$item" != config/* && "$item" != .backups/* && "$item" != logs && "$item" != storage && "$item" != config && "$item" != .backups ]]; then
-            # Check if this item exists in remote
-            if echo "$REMOTE_FILES" | grep -q "^$item"; then
-                log "Removing untracked item that exists in remote: $item"
-                rm -rf "$item" 2>/dev/null || true
-            fi
-        fi
-    done
-fi
-
-# Final cleanup of any remaining problematic untracked files (but not important dirs)
-git clean -fd 2>&1 | grep -v -E "(logs/|storage/|config/|\.backups/)" | tee -a "$LOG_FILE" || true
-
-# Fix git index issues where files might be tracked as directories
-if [ -f "docker/nginx/default.conf" ] && [ ! -d "docker/nginx/default.conf" ]; then
-    # File exists and is actually a file, but git might think it's a directory
-    git rm --cached -r "docker/nginx/default.conf" 2>/dev/null || true
-fi
-
-# Fix git permissions (Fix 2: Enhanced permission handling)
-log "Fixing git repository permissions..."
-find . -type f -name "*.conf" -exec chmod 644 {} \; 2>/dev/null || true
-find . -type d -exec chmod 755 {} \; 2>/dev/null || true
-chmod -R 755 .git 2>/dev/null || true
-
-# Remove any directories that git thinks are files or vice versa
-if [ -d "docker/nginx/default.conf" ]; then
-    warn "Found directory where file should be, removing..."
-    rm -rf "docker/nginx/default.conf" 2>/dev/null || true
-fi
-
-# Reset to match remote branch exactly
-log "Resetting to match remote branch origin/$GIT_BRANCH..."
-if ! git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
-    # If reset fails, try more aggressive cleanup
-    warn "Git reset failed, attempting aggressive cleanup and retry..."
-    git clean -fdx 2>&1 | tee -a "$LOG_FILE" || true
-    # Remove problematic paths manually
-    rm -rf "docker/nginx/default.conf" 2>/dev/null || true
-    # Try reset again
-    if ! git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
-        # Last resort: checkout the branch directly
-        warn "Hard reset failed, trying checkout approach..."
-        git checkout -f "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
-        git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
-        if ! git diff --quiet HEAD origin/"$GIT_BRANCH" 2>/dev/null; then
-            fail "Failed to reset git repository to match remote after multiple attempts"
-        fi
-    fi
-fi
-
-# Verify we're on the correct commit
+# Verify repository is clean and up to date
 CURRENT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 REMOTE_COMMIT=$(git rev-parse origin/"$GIT_BRANCH" 2>/dev/null || echo "unknown")
-if [ "$CURRENT_COMMIT" != "$REMOTE_COMMIT" ]; then
-    warn "Commit mismatch detected. Current: $CURRENT_COMMIT, Remote: $REMOTE_COMMIT"
-    warn "Attempting final sync..."
-    git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || fail "Failed to sync with remote branch"
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
+if [ "$CURRENT_BRANCH" != "$GIT_BRANCH" ]; then
+    warn "Branch mismatch: current=$CURRENT_BRANCH, expected=$GIT_BRANCH"
+    git checkout -B "$GIT_BRANCH" "origin/$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || fail "Failed to checkout branch $GIT_BRANCH"
 fi
 
-success "Code pulled successfully from $GIT_BRANCH (commit: ${CURRENT_COMMIT:0:8})"
+if [ "$CURRENT_COMMIT" != "$REMOTE_COMMIT" ]; then
+    warn "Commit mismatch after re-clone. This should not happen."
+    warn "Current: ${CURRENT_COMMIT:0:8}, Remote: ${REMOTE_COMMIT:0:8}"
+    # Try to fix it
+    git fetch origin "$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+    git reset --hard origin/"$GIT_BRANCH" 2>&1 | tee -a "$LOG_FILE" || true
+fi
+
+success "Repository verified and up to date (commit: ${CURRENT_COMMIT:0:8})"
 
 # ============================
 # Docker Operations
