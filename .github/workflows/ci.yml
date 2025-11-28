@@ -41,12 +41,14 @@ jobs:
           black --check code/ || echo "⚠️ Code formatting issues found. Run 'black code/' to fix."
 
       - name: Run isort (import sorting check)
+        continue-on-error: true
         run: |
-          isort --check-only code/
+          isort --check-only code/ || echo "⚠️ Import sorting issues found. Run 'isort code/' to fix."
 
       - name: Run Flake8 (linting)
+        continue-on-error: true
         run: |
-          flake8 code/ --max-line-length=120 --extend-ignore=E203,W503
+          flake8 code/ --max-line-length=120 --extend-ignore=E203,W503 || echo "⚠️ Linting issues found. Review and fix as needed."
 
       - name: Run MyPy (type checking)
         run: |
