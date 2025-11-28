@@ -14,7 +14,7 @@ on:
 
 env:
   ENVIRONMENT: staging
-  DEPLOY_PATH: /app/staging
+  DEPLOY_PATH: /home/ubuntu/staging/ai-ia-backend
 
 jobs:
   pre-deploy-checks:
@@ -114,8 +114,10 @@ jobs:
           DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
           ENVIRONMENT: ${{ env.ENVIRONMENT }}
         run: |
-          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash -s << 'REMOTE_SCRIPT'
             set -e
+            DEPLOY_PATH='${{ env.DEPLOY_PATH }}'
+            ENVIRONMENT='${{ env.ENVIRONMENT }}'
             GIT_REPO='https://github.com/infoaiiaedu/ai-ia-backend.git'
             GIT_BRANCH='staging'
             
@@ -208,7 +210,7 @@ jobs:
             ENVIRONMENT=$ENVIRONMENT bash scripts/deploy-modern.sh
             
             echo "✅ Deployment completed"
-          EOF
+          REMOTE_SCRIPT
 
   health-check:
     name: Post-Deployment Health Check
@@ -231,10 +233,12 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
         run: |
-          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
-            cd $DEPLOY_PATH
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash -s << 'REMOTE_SCRIPT'
+            set -e
+            DEPLOY_PATH='${{ env.DEPLOY_PATH }}'
+            cd "$DEPLOY_PATH"
             bash scripts/health-check.sh --environment staging
-          EOF
+          REMOTE_SCRIPT
 
   notify:
     name: Notify Deployment Status
