@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document provides a comprehensive analysis of the current deployment process and Git workflow, identifying pain points, inefficiencies, and anti-patterns. It serves as the foundation for the modernization effort.
+This document provides a comprehensive analysis of the current deployment process and Git workflow, identifying pain points, inefficiencies, and anti-patterns. It serves as the foundation for the modernization effort
 
 ## Current State Analysis
 
