@@ -160,8 +160,8 @@ jobs:
               rm -rf .tmp_repo .git 2>/dev/null || true
               
               TEMP_CLONE=$(mktemp -d)
-              echo "📦 Cloning repository to temporary directory..."
-              if git clone -b "$GIT_BRANCH" --single-branch --depth 1 "$GIT_REPO" "$TEMP_CLONE" 2>&1; then
+              echo "📦 Cloning repository to temporary directory (shallow clone)..."
+              if git clone -b "$GIT_BRANCH" --single-branch --depth 1 --shallow-submodules "$GIT_REPO" "$TEMP_CLONE" 2>&1; then
                 echo "📦 Moving files to deployment directory..."
                 shopt -s dotglob
                 find "$TEMP_CLONE" -mindepth 1 -maxdepth 1 ! -name '.git' -exec mv {} . \; 2>/dev/null
@@ -200,14 +200,31 @@ jobs:
             mkdir -p "$BACKUP_DIR"
             cp -r config "$BACKUP_DIR/" 2>/dev/null || true
             
-            # Pull latest code
+            # Pull latest code (shallow to save space)
             echo "📥 Pulling latest code..."
-            git fetch origin staging
+            if git rev-parse --is-shallow-repository > /dev/null 2>&1; then
+              git fetch --depth=1 origin staging
+            else
+              git fetch origin staging
+            fi
             git reset --hard origin/staging
+            
+            # Optimize git repository to save space
+            echo "🧹 Optimizing git repository..."
+            git gc --prune=now --aggressive > /dev/null 2>&1 || true
+            
+            # Cleanup before deployment to free space
+            echo "🧹 Running pre-deployment cleanup..."
+            docker system prune -af --volumes > /dev/null 2>&1 || true
+            docker builder prune -af > /dev/null 2>&1 || true
             
             # Run deployment script
             echo "🚀 Running deployment..."
             ENVIRONMENT=$ENVIRONMENT bash scripts/deploy-modern.sh
+            
+            # Final cleanup after deployment
+            echo "🧹 Running post-deployment cleanup..."
+            docker system prune -af > /dev/null 2>&1 || true
             
             echo "✅ Deployment completed"
           REMOTE_SCRIPT

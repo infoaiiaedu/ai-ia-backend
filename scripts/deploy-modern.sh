@@ -13,9 +13,13 @@ LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/deployment_$(date +%Y%m%d_%H%M%S).log"
 BACKUP_DIR="${PROJECT_DIR}/.backups"
 ENVIRONMENT="${ENVIRONMENT:-production}"
-GIT_BRANCH="${GIT_BRANCH:-main}"
 
-# Determine compose files based on environment
+# Resource limits for constrained servers
+MAX_BACKUPS=2  # Keep only last 2 backups
+MAX_LOG_FILES=5  # Keep only last 5 log files
+MAX_LOG_SIZE_MB=10  # Max 10MB per log file
+
+# Determine compose files and git branch based on environment
 case $ENVIRONMENT in
     dev|development)
         COMPOSE_FILES="-f docker-compose.base.yml -f docker-compose.dev.yml"
@@ -69,24 +73,126 @@ fail() {
 # Functions
 # ============================
 
+# Cleanup Docker resources to save space
+cleanup_docker() {
+    log "Cleaning up Docker resources..."
+    
+    # Remove stopped containers
+    docker container prune -f > /dev/null 2>&1 || true
+    
+    # Remove unused images (keep only images in use)
+    docker image prune -af > /dev/null 2>&1 || true
+    
+    # Remove build cache
+    docker builder prune -af > /dev/null 2>&1 || true
+    
+    # Remove unused volumes (be careful with this)
+    docker volume prune -f > /dev/null 2>&1 || true
+    
+    # Remove old/unused networks
+    docker network prune -f > /dev/null 2>&1 || true
+    
+    success "Docker cleanup completed"
+}
+
+# Rotate backups - keep only the most recent ones
+rotate_backups() {
+    log "Rotating backups (keeping last $MAX_BACKUPS)..."
+    if [ -d "$BACKUP_DIR" ]; then
+        # Count backups and remove oldest if exceeding limit
+        BACKUP_COUNT=$(find "$BACKUP_DIR" -maxdepth 1 -type d -name "backup_*" | wc -l)
+        if [ "$BACKUP_COUNT" -gt "$MAX_BACKUPS" ]; then
+            # Remove oldest backups
+            find "$BACKUP_DIR" -maxdepth 1 -type d -name "backup_*" -printf '%T@ %p\n' | \
+                sort -n | head -n -$MAX_BACKUPS | cut -d' ' -f2- | xargs -r rm -rf
+            success "Removed old backups (kept $MAX_BACKUPS most recent)"
+        fi
+    fi
+}
+
+# Rotate log files to prevent unlimited growth
+rotate_logs() {
+    log "Rotating log files (keeping last $MAX_LOG_FILES, max ${MAX_LOG_SIZE_MB}MB each)..."
+    if [ -d "$LOG_DIR" ]; then
+        # Remove logs older than 30 days
+        find "$LOG_DIR" -name "*.log" -type f -mtime +30 -delete 2>/dev/null || true
+        
+        # Keep only the most recent log files
+        LOG_COUNT=$(find "$LOG_DIR" -name "*.log" -type f | wc -l)
+        if [ "$LOG_COUNT" -gt "$MAX_LOG_FILES" ]; then
+            find "$LOG_DIR" -name "*.log" -type f -printf '%T@ %p\n' | \
+                sort -n | head -n -$MAX_LOG_FILES | cut -d' ' -f2- | xargs -r rm -f
+            success "Removed old log files (kept $MAX_LOG_FILES most recent)"
+        fi
+        
+        # Truncate large log files
+        find "$LOG_DIR" -name "*.log" -type f -size +${MAX_LOG_SIZE_MB}M -exec truncate -s ${MAX_LOG_SIZE_MB}M {} \; 2>/dev/null || true
+    fi
+}
+
+# Clean up temporary files and build artifacts
+cleanup_temp_files() {
+    log "Cleaning up temporary files..."
+    
+    # Remove Python cache
+    find "$PROJECT_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find "$PROJECT_DIR" -type f -name "*.pyc" -delete 2>/dev/null || true
+    find "$PROJECT_DIR" -type f -name "*.pyo" -delete 2>/dev/null || true
+    
+    # Remove node_modules if not needed (be careful with this)
+    # find "$PROJECT_DIR" -type d -name "node_modules" -not -path "*/code/apps/widgets/node_modules" -exec rm -rf {} + 2>/dev/null || true
+    
+    # Remove temporary git files
+    find "$PROJECT_DIR" -type f -name ".gitkeep" -delete 2>/dev/null || true
+    
+    # Remove old deployment artifacts
+    find "$PROJECT_DIR" -type d -name ".tmp_repo" -exec rm -rf {} + 2>/dev/null || true
+    
+    success "Temporary files cleaned up"
+}
+
+# Optimize git repository (shallow clone, clean history)
+optimize_git() {
+    log "Optimizing git repository..."
+    cd "$PROJECT_DIR"
+    
+    # Convert to shallow repository if not already shallow
+    if [ -d .git ] && ! git rev-parse --is-shallow-repository > /dev/null 2>&1; then
+        log "Converting to shallow repository..."
+        git fetch --depth=1 origin "$GIT_BRANCH" 2>/dev/null || true
+    fi
+    
+    # Clean up git objects
+    git gc --prune=now --aggressive > /dev/null 2>&1 || true
+    
+    success "Git repository optimized"
+}
+
 create_backup() {
     log "Creating deployment backup..."
     mkdir -p "$BACKUP_DIR"
     BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S)"
     mkdir -p "$BACKUP_FILE"
     
-    # Backup configuration
+    # Backup only essential configuration (not full directory)
     if [ -d "config/$ENVIRONMENT" ]; then
-        cp -r "config/$ENVIRONMENT" "$BACKUP_FILE/config" 2>/dev/null || true
+        # Only backup project.toml, not entire config directory
+        if [ -f "config/$ENVIRONMENT/project.toml" ]; then
+            mkdir -p "$BACKUP_FILE/config/$ENVIRONMENT"
+            cp "config/$ENVIRONMENT/project.toml" "$BACKUP_FILE/config/$ENVIRONMENT/" 2>/dev/null || true
+        fi
     fi
     
-    # Backup database
+    # Backup database (compressed to save space)
     if docker compose $COMPOSE_FILES ps psql | grep -q "Up"; then
-        log "Creating database backup..."
-        docker compose $COMPOSE_FILES exec -T psql pg_dump -U postgres ai_db > "$BACKUP_FILE/db_backup.sql" 2>/dev/null || warn "Database backup failed"
+        log "Creating compressed database backup..."
+        docker compose $COMPOSE_FILES exec -T psql pg_dump -U postgres ai_db | gzip > "$BACKUP_FILE/db_backup.sql.gz" 2>/dev/null || warn "Database backup failed"
     fi
     
     success "Backup created: $BACKUP_FILE"
+    
+    # Rotate backups after creating new one
+    rotate_backups
 }
 
 verify_prerequisites() {
@@ -113,14 +219,28 @@ update_repository() {
     
     cd "$PROJECT_DIR"
     
-    # Fetch latest
-    git fetch origin "$GIT_BRANCH" || fail "Failed to fetch from origin"
+    # Ensure we're in a git repository
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        fail "Not in a git repository"
+    fi
     
-    # Checkout branch
-    git checkout "$GIT_BRANCH" || fail "Failed to checkout branch"
+    # Use shallow fetch to save space
+    if git rev-parse --is-shallow-repository > /dev/null 2>&1; then
+        git fetch --depth=1 origin "$GIT_BRANCH" || fail "Failed to fetch from origin"
+    else
+        git fetch origin "$GIT_BRANCH" || fail "Failed to fetch from origin"
+    fi
     
-    # Pull latest
-    git pull origin "$GIT_BRANCH" || fail "Failed to pull latest changes"
+    # Checkout branch (create tracking branch if it doesn't exist locally)
+    if git show-ref --verify --quiet refs/heads/"$GIT_BRANCH"; then
+        git checkout "$GIT_BRANCH" || fail "Failed to checkout branch"
+    else
+        # Branch doesn't exist locally, create it tracking the remote
+        git checkout -b "$GIT_BRANCH" "origin/$GIT_BRANCH" || fail "Failed to create and checkout branch"
+    fi
+    
+    # Reset to match remote exactly
+    git reset --hard "origin/$GIT_BRANCH" || fail "Failed to reset to origin/$GIT_BRANCH"
     
     CURRENT_COMMIT=$(git rev-parse --short HEAD)
     success "Repository updated (commit: $CURRENT_COMMIT)"
@@ -133,10 +253,20 @@ deploy_services() {
     log "Stopping existing services..."
     docker compose $COMPOSE_FILES down --remove-orphans || warn "Some services may not have stopped cleanly"
     
-    # Build images
+    # Clean up Docker before building to free space
+    cleanup_docker
+    
+    # Build images (use cache when possible to save time, but clean up after)
     log "Building Docker images..."
-    docker compose $COMPOSE_FILES build --no-cache || fail "Failed to build images"
+    # Try with cache first, but if it fails, build without cache
+    if ! docker compose $COMPOSE_FILES build 2>&1 | tee -a "$LOG_FILE"; then
+        log "Build with cache failed, trying without cache..."
+        docker compose $COMPOSE_FILES build --no-cache || fail "Failed to build images"
+    fi
     success "Images built successfully"
+    
+    # Clean up build cache after building
+    docker builder prune -af > /dev/null 2>&1 || true
     
     # Start services
     log "Starting services..."
@@ -202,6 +332,10 @@ echo ""
 
 # Create logs directory
 mkdir -p "$LOG_DIR"
+
+# Rotate logs before starting
+rotate_logs
+
 log "Deployment started for environment: $ENVIRONMENT"
 log "Project directory: $PROJECT_DIR"
 log "Target branch: $GIT_BRANCH"
@@ -211,11 +345,19 @@ cd "$PROJECT_DIR"
 # Verify prerequisites
 verify_prerequisites
 
-# Create backup
+# Cleanup before deployment to free up space
+log "Running pre-deployment cleanup..."
+cleanup_temp_files
+cleanup_docker
+
+# Create backup (with rotation)
 create_backup
 
-# Update repository
+# Update repository (optimized)
 update_repository
+
+# Optimize git after update
+optimize_git
 
 # Deploy services
 deploy_services
@@ -236,6 +378,11 @@ else
     exit 1
 fi
 
+# Final cleanup after successful deployment
+log "Running post-deployment cleanup..."
+cleanup_docker
+cleanup_temp_files
+
 # Final summary
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
@@ -245,4 +392,8 @@ echo ""
 log "Deployment finished successfully"
 log "Logs saved to: $LOG_FILE"
 log "Backup saved to: $BACKUP_DIR"
+
+# Show disk usage
+log "Current disk usage:"
+df -h "$PROJECT_DIR" | tail -1 | awk '{print "  Used: " $3 " / " $2 " (" $5 " used)"}'
 
