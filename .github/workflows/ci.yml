@@ -1,0 +1,282 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - develop
+      - feature/**
+      - hotfix/**
+      - release/**
+  pull_request:
+    branches:
+      - develop
+      - staging
+      - main
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install linting dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy
+
+      - name: Run Black (format check)
+        run: |
+          black --check code/
+
+      - name: Run isort (import sorting check)
+        run: |
+          isort --check-only code/
+
+      - name: Run Flake8 (linting)
+        run: |
+          flake8 code/ --max-line-length=120 --extend-ignore=E203,W503
+
+      - name: Run MyPy (type checking)
+        run: |
+          mypy code/ --ignore-missing-imports || true
+
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ai_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7.2.4-alpine3.19
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    strategy:
+      matrix:
+        test-type: [unit, integration]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r code/requirements.txt
+          pip install pytest pytest-django pytest-cov
+
+      - name: Create required directories
+        run: |
+          mkdir -p storage logs config
+
+      - name: Create test configuration
+        run: |
+          mkdir -p config
+          cat > config/project.toml << 'EOF'
+          [project]
+          SECRET_KEY = "test-secret-key-for-ci-only"
+          DEBUG = true
+          ALLOWED_HOSTS = ["*"]
+          CSRF_TRUSTED_ORIGINS = []
+          REDIS_URI = "redis://localhost:6379/0"
+
+          [database]
+          ENGINE = "postgresql"
+          NAME = "ai_db"
+          USER = "postgres"
+          PASSWORD = "postgres"
+          HOST = "localhost"
+          PORT = "5432"
+          EOF
+
+      - name: Run Django system check
+        env:
+          APP_CONFIG_FILE: config/project.toml
+        run: |
+          cd code
+          python manage.py check --deploy
+
+      - name: Run unit tests
+        if: matrix.test-type == 'unit'
+        env:
+          APP_CONFIG_FILE: config/project.toml
+          DATABASE_HOST: localhost
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+          DATABASE_NAME: ai_db
+          REDIS_URI: redis://localhost:6379/0
+        run: |
+          cd code
+          python manage.py test apps.core apps.user apps.payments --keepdb --verbosity=2
+
+      - name: Run integration tests
+        if: matrix.test-type == 'integration'
+        env:
+          APP_CONFIG_FILE: config/project.toml
+          DATABASE_HOST: localhost
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+          DATABASE_NAME: ai_db
+          REDIS_URI: redis://localhost:6379/0
+        run: |
+          cd code
+          python manage.py test apps.core apps.user apps.payments --keepdb --verbosity=2
+
+      - name: Generate coverage report
+        if: always()
+        env:
+          APP_CONFIG_FILE: config/project.toml
+        run: |
+          cd code
+          coverage run --source='.' manage.py test apps.core apps.user apps.payments
+          coverage xml
+          coverage html
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./code/coverage.xml
+          flags: ${{ matrix.test-type }}
+          name: ${{ matrix.test-type }}-coverage
+
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install security scanning tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit
+
+      - name: Run Safety (dependency vulnerability check)
+        run: |
+          safety check --file code/requirements.txt --json || true
+
+      - name: Run Bandit (security linting)
+        run: |
+          bandit -r code/ -f json -o bandit-report.json || true
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [lint, test, security]
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  validate-docker-compose:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose files
+        run: |
+          docker compose -f docker-compose.base.yml config > /dev/null
+          docker compose -f docker-compose.dev.yml config > /dev/null
+          docker compose -f docker-compose.staging.yml config > /dev/null
+          docker compose -f docker-compose.prod.yml config > /dev/null
+
+  validate-config:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Validate TOML configurations
+        run: |
+          python -c "import tomli; [tomli.load(open(f'config/{env}/project.toml', 'rb')) for env in ['dev', 'staging', 'prod']]"
+        continue-on-error: true
+

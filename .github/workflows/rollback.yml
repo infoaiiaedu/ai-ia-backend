@@ -1,0 +1,86 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      backup_id:
+        description: 'Backup ID to rollback to (leave empty for latest)'
+        required: false
+        type: string
+      force:
+        description: 'Force rollback without confirmation'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  ENVIRONMENT: ${{ inputs.environment }}
+  DEPLOY_PATH: /app/${{ inputs.environment }}
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Execute rollback
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          BACKUP_ID: ${{ inputs.backup_id }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+            set -e
+            cd $DEPLOY_PATH
+            
+            if [ -n "$BACKUP_ID" ]; then
+              bash scripts/rollback.sh --environment "$ENVIRONMENT" --backup-id "$BACKUP_ID" $([ "$FORCE" = "true" ] && echo "--force" || echo "")
+            else
+              bash scripts/rollback.sh --environment "$ENVIRONMENT" $([ "$FORCE" = "true" ] && echo "--force" || echo "")
+            fi
+          EOF
+
+      - name: Verify rollback
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+        run: |
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+            cd $DEPLOY_PATH
+            bash scripts/health-check.sh --environment "$ENVIRONMENT" --comprehensive
+          EOF
+
+      - name: Notify rollback completion
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Rollback to ${{ inputs.environment }} completed successfully"
+          else
+            echo "❌ Rollback to ${{ inputs.environment }} failed"
+          fi
+          # Add notification logic here (Slack, email, PagerDuty, etc.)
+

@@ -1,0 +1,22 @@
+# Base Docker Compose configuration
+# This file contains shared configuration for all environments
+# Environment-specific overrides are in docker-compose.{env}.yml files
+
+x-common-variables: &common-variables
+  TZ: UTC
+  PYTHONUNBUFFERED: 1
+
+x-common-logging: &common-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+volumes:
+  redis-data:
+  postgres-data:
+
+networks:
+  ai_network:
+    driver: bridge
+
