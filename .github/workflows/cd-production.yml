@@ -54,6 +54,7 @@ jobs:
     if: ${{ !inputs.skip_tests }}
     uses: ./.github/workflows/ci.yml
     secrets: inherit
+    with: {}
 
   security-scan:
     name: Security Scan
@@ -205,7 +206,7 @@ jobs:
             
             # Run deployment script
             echo "🚀 Running production deployment..."
-            ENVIRONMENT=$ENVIRONMENT bash scripts/deploy.sh
+            ENVIRONMENT=$ENVIRONMENT bash scripts/deploy-modern.sh
             
             echo "✅ Deployment completed"
           EOF

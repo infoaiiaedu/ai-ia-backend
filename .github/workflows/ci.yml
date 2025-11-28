@@ -12,6 +12,14 @@ on:
       - develop
       - staging
       - main
+  workflow_call:
+    secrets:
+      DEPLOY_KEY:
+        required: false
+      DEPLOY_HOST:
+        required: false
+      DEPLOY_USER:
+        required: false
 
 env:
   PYTHON_VERSION: '3.11'
