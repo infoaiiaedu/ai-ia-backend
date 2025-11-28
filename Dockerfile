@@ -1,88 +1,38 @@
-# ============================
-# BUILDER
-# ============================
-FROM python:3.11-alpine3.19 AS builder
-
-WORKDIR /usr/src/app
-
-# Build dependencies
-RUN apk add --no-cache build-base \
-    && pip install --upgrade pip
-
-# Copy requirements and build wheels
-COPY code/requirements.txt requirements.txt
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt
-
-# ============================
-# FINAL IMAGE
-# ============================
 FROM python:3.11-alpine3.19
 
-# Create app user
-RUN addgroup -S app && adduser -S -G app app
-
-ENV HOME=/app
-ENV APP_HOME=/app
-WORKDIR $APP_HOME/code
-ENV PYTHONPATH="/app/code"
-
-# Install runtime dependencies
+# Install system dependencies
 RUN apk add --no-cache \
     bash \
     wget \
     postgresql-client \
     netcat-openbsd \
-    imagemagick \
-    ghostscript \
-    libjpeg-turbo
+    build-base \
+    libjpeg-turbo-dev \
+    zlib-dev
 
-# Create necessary directories with proper permissions
-# Note: We don't create /app/logs here since it will be mounted from host
-RUN mkdir -p /app/storage /app/cache && \
-    chown -R app:app /app && \
-    chmod -R 755 /app
+# Set working directory
+WORKDIR /app/code
 
-# Copy Python wheels and install
-COPY --from=builder /usr/src/app/wheels /wheels
-RUN pip install --upgrade pip \
-    && pip install --no-cache /wheels/*
+# Set environment variables
+ENV PYTHONPATH=/app/code
+ENV PYTHONUNBUFFERED=1
+
+# Copy requirements first for better caching
+COPY code/requirements.txt /app/code/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY ./code /app/code
 
-# Create logs directory and set proper permissions for the entire app directory
-RUN mkdir -p /app/code/logs && \
-    chown -R app:app /app && \
-    chmod -R 755 /app && \
-    chmod -R 775 /app/storage && \
-    chmod -R 775 /app/code/logs
+# Create necessary directories
+RUN mkdir -p /app/storage /app/code/logs && \
+    chmod -R 755 /app
 
-# Create entrypoint script to handle initialization (before switching user)
-RUN echo '#!/bin/sh\n\
-set -e\n\
-echo "Creating storage directories..."\n\
-mkdir -p /app/storage /app/cache /app/code/logs\n\
-echo "Waiting for Postgres..."\n\
-TIMEOUT=60\n\
-ELAPSED=0\n\
-until pg_isready -h psql -U postgres; do\n\
-  sleep 2\n\
-  ELAPSED=$((ELAPSED + 2))\n\
-  if [ $ELAPSED -ge $TIMEOUT ]; then\n\
-    echo "ERROR: PostgreSQL not ready after ${TIMEOUT}s - exiting"\n\
-    exit 1\n\
-  fi\n\
-  echo "Waiting... (${ELAPSED}s/${TIMEOUT}s)"\n\
-done\n\
-echo "Postgres is ready!"\n\
-echo "Applying migrations..."\n\
-python manage.py migrate --noinput\n\
-echo "Collecting static files..."\n\
-python manage.py collectstatic --noinput --no-post-process\n\
-echo "Starting Gunicorn..."\n\
-exec gunicorn main.wsgi:application --bind 0.0.0.0:5000 --workers 2 --threads 2 --log-level info\n\
-' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh && chown app:app /app/entrypoint.sh
+# Expose port
+EXPOSE 5000
 
-USER app
-
-CMD ["/app/entrypoint.sh"]
+# Default command (can be overridden in docker-compose)
+CMD ["python", "manage.py", "runserver", "0.0.0.0:5000"]

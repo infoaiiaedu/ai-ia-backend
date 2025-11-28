@@ -315,13 +315,20 @@ jobs:
             fi && \
             echo '✓ Bootstrap complete: Repository ready for deployment'"
           
+          # Pull latest code
+          echo "📥 Pulling latest code from main branch..."
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd $DEPLOY_PATH && \
+            git fetch origin main && \
+            git reset --hard origin/main && \
+            echo '✓ Code updated'"
+          
           # Execute deployment script on server
           # Capture exit code to ensure workflow fails on deployment failure
           echo "🚀 Executing deployment script on server..."
           set +e
           ssh $SSH_OPTS \
              "$DEPLOY_USER@$DEPLOY_HOST" \
-             "cd $DEPLOY_PATH && MAX_DEPLOY_LOGS=$MAX_DEPLOY_LOGS MAX_DEPLOY_BACKUPS=$MAX_DEPLOY_BACKUPS MIN_FREE_SPACE_KB=$MIN_FREE_SPACE_KB DISABLE_DEPLOY_BACKUP=$DISABLE_DEPLOY_BACKUP bash scripts/deploy.sh"
+             "cd $DEPLOY_PATH && bash scripts/deploy.sh"
           DEPLOY_EXIT_CODE=$?
           set -e
           
