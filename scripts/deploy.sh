@@ -401,19 +401,36 @@ safe_reclone_repository() {
     done
     
     # Remove all other files and directories (including .git)
-    # But exclude the temporary directories we're using
+    # Note: PRESERVE_TEMP and BACKUP_TEMP are in /tmp, not in current directory
     log "Removing old repository..."
-    for item in * .*; do
-        # Skip . and .., and our temp directories
-        if [ "$item" = "." ] || [ "$item" = ".." ]; then
-            continue
+    
+    # Use find to safely list and remove files, excluding current/parent
+    # Temporarily disable set -e for this operation to handle any removal errors gracefully
+    set +e
+    find . -mindepth 1 -maxdepth 1 \
+        ! -name "." \
+        ! -name ".." \
+        -exec rm -rf {} + 2>/dev/null
+    REMOVE_EXIT_CODE=$?
+    set -e
+    
+    # Log if there were any issues, but continue (some files might be locked or have permission issues)
+    if [ $REMOVE_EXIT_CODE -ne 0 ]; then
+        warn "Some files could not be removed (may be normal if files are in use)"
+    fi
+    
+    # Force remove .git if it still exists (it might be locked)
+    if [ -d ".git" ]; then
+        log "Force removing .git directory..."
+        set +e
+        rm -rf .git 2>/dev/null || true
+        # If still exists, try chmod first
+        if [ -d ".git" ]; then
+            chmod -R u+w .git 2>/dev/null || true
+            rm -rf .git 2>/dev/null || true
         fi
-        if [ "$item" = "$PRESERVE_TEMP_NAME" ] || [ "$item" = "$BACKUP_TEMP_NAME" ]; then
-            continue
-        fi
-        # Remove everything else
-        rm -rf "$item" 2>/dev/null || true
-    done
+        set -e
+    fi
     
     # Clone fresh repository
     log "Cloning fresh repository from $GIT_REPO_URL (branch: $GIT_BRANCH)..."
