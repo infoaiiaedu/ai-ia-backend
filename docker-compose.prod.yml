@@ -50,7 +50,8 @@ services:
     ports:
       - "5000:5000"
     environment:
-      <<: *common-variables
+      TZ: UTC
+      PYTHONUNBUFFERED: 1
       DEBUG: "false"
       APP_CONFIG_FILE: /app/config/project.toml
     healthcheck:
@@ -60,7 +61,10 @@ services:
       retries: 3
       start_period: 60s
     logging:
-      <<: *common-logging
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -92,7 +96,10 @@ services:
       retries: 5
       start_period: 10s
     logging:
-      <<: *common-logging
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -123,7 +130,10 @@ services:
       retries: 5
       start_period: 30s
     logging:
-      <<: *common-logging
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -158,7 +168,10 @@ services:
       retries: 3
       start_period: 10s
     logging:
-      <<: *common-logging
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -183,7 +196,10 @@ services:
       retries: 3
       start_period: 30s
     logging:
-      <<: *common-logging
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -206,5 +222,8 @@ services:
     networks:
       - ai_network
     logging:
-      <<: *common-logging
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
