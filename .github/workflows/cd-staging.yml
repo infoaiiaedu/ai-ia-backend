@@ -116,7 +116,81 @@ jobs:
         run: |
           ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
             set -e
-            cd $DEPLOY_PATH
+            GIT_REPO='https://github.com/infoaiiaedu/ai-ia-backend.git'
+            GIT_BRANCH='staging'
+            
+            # Ensure deployment directory exists
+            echo "🔧 Ensuring deployment directory exists..."
+            mkdir -p "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
+            
+            # Bootstrap git repository if needed
+            echo "🔧 Checking git repository..."
+            NEEDS_CLONE=false
+            if [ -d .git ] && git rev-parse --git-dir > /dev/null 2>&1; then
+              echo "✓ Git repository found, testing connection..."
+              if git fetch origin "$GIT_BRANCH" 2>/dev/null; then
+                echo "✓ Repository is valid and accessible"
+              else
+                echo "⚠ Repository exists but is corrupted, will re-clone..."
+                NEEDS_CLONE=true
+              fi
+            else
+              echo "⚠ No valid git repository found, will clone..."
+              NEEDS_CLONE=true
+            fi
+            
+            if [ "$NEEDS_CLONE" = true ]; then
+              echo "📦 Backing up important directories..."
+              BACKUP_DIR=$(mktemp -d)
+              for dir in config storage docker logs; do
+                if [ -d "$dir" ]; then
+                  cp -r "$dir" "$BACKUP_DIR/" 2>/dev/null || true
+                  echo "  ✓ Backed up $dir"
+                fi
+              done
+              
+              echo "🔧 Fixing directory permissions..."
+              chmod -R u+w . 2>/dev/null || true
+              
+              echo "📦 Removing old files (preserving config, storage, docker, logs)..."
+              find . -mindepth 1 -maxdepth 1 ! -name 'config' ! -name 'storage' ! -name 'docker' ! -name '.backups' ! -name 'logs' ! -name '.tmp_repo' -exec rm -rf {} \; 2>/dev/null || true
+              rm -rf .tmp_repo .git 2>/dev/null || true
+              
+              TEMP_CLONE=$(mktemp -d)
+              echo "📦 Cloning repository to temporary directory..."
+              if git clone -b "$GIT_BRANCH" --single-branch --depth 1 "$GIT_REPO" "$TEMP_CLONE" 2>&1; then
+                echo "📦 Moving files to deployment directory..."
+                shopt -s dotglob
+                find "$TEMP_CLONE" -mindepth 1 -maxdepth 1 ! -name '.git' -exec mv {} . \; 2>/dev/null
+                if [ -d "$TEMP_CLONE/.git" ]; then
+                  mv "$TEMP_CLONE/.git" . 2>/dev/null || true
+                fi
+                shopt -u dotglob
+                rm -rf "$TEMP_CLONE"
+                echo "✓ Repository cloned successfully"
+              else
+                echo "❌ Failed to clone repository"
+                rm -rf "$TEMP_CLONE"
+                exit 1
+              fi
+              
+              # Restore backed up directories
+              if [ -d "$BACKUP_DIR" ]; then
+                echo "📦 Restoring backed up directories..."
+                for dir in config storage docker logs; do
+                  if [ -d "$BACKUP_DIR/$dir" ]; then
+                    if [ -d "$dir" ]; then
+                      cp -r "$BACKUP_DIR/$dir"/* "$dir/" 2>/dev/null || true
+                    else
+                      mv "$BACKUP_DIR/$dir" . 2>/dev/null || true
+                    fi
+                    echo "  ✓ Restored $dir"
+                  fi
+                done
+                rm -rf "$BACKUP_DIR"
+              fi
+            fi
             
             # Backup current deployment
             echo "📦 Creating backup..."
