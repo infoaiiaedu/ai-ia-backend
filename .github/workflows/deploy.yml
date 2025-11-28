@@ -248,6 +248,11 @@ jobs:
             set -e && \
             GIT_REPO='https://github.com/infoaiiaedu/ai-ia-backend.git' && \
             GIT_BRANCH='main' && \
+            echo '🔧 Checking directory permissions...' && \
+            if [ ! -w . ]; then \
+              echo '⚠ Warning: Deployment directory is not writable. Attempting to fix permissions...' && \
+              chmod -R u+w . 2>/dev/null || sudo chown -R \$USER:\$USER . 2>/dev/null || true; \
+            fi && \
             echo '📦 Backing up important directories...' && \
             BACKUP_DIR=\$(mktemp -d) && \
             for dir in config storage docker logs; do \
@@ -271,16 +276,27 @@ jobs:
             fi && \
             if [ \"\$NEEDS_CLONE\" = true ]; then \
               echo '🔄 Cloning repository...' && \
+              echo '🔧 Fixing directory permissions...' && \
+              chmod -R u+w . 2>/dev/null || true && \
               find . -mindepth 1 -maxdepth 1 ! -name 'config' ! -name 'storage' ! -name 'docker' ! -name '.backups' ! -name 'logs' ! -name '.tmp_repo' -exec rm -rf {} \; 2>/dev/null || true && \
-              git clone -b \"\$GIT_BRANCH\" --single-branch --depth 1 \"\$GIT_REPO\" .tmp_repo 2>&1 && \
-              shopt -s dotglob && \
-              find .tmp_repo -mindepth 1 -maxdepth 1 ! -name '.git' -exec mv {} . \; 2>/dev/null && \
-              if [ -d .tmp_repo/.git ]; then \
-                mv .tmp_repo/.git . 2>/dev/null || true; \
-              fi && \
-              shopt -u dotglob && \
-              rm -rf .tmp_repo && \
-              echo '✓ Repository cloned successfully'; \
+              rm -rf .tmp_repo 2>/dev/null || true && \
+              TEMP_CLONE=\$(mktemp -d) && \
+              echo \"📦 Cloning to temporary directory: \$TEMP_CLONE\" && \
+              if git clone -b \"\$GIT_BRANCH\" --single-branch --depth 1 \"\$GIT_REPO\" \"\$TEMP_CLONE\" 2>&1; then \
+                echo '📦 Moving files to deployment directory...' && \
+                shopt -s dotglob && \
+                find \"\$TEMP_CLONE\" -mindepth 1 -maxdepth 1 ! -name '.git' -exec mv {} . \; 2>/dev/null && \
+                if [ -d \"\$TEMP_CLONE/.git\" ]; then \
+                  mv \"\$TEMP_CLONE/.git\" . 2>/dev/null || true; \
+                fi && \
+                shopt -u dotglob && \
+                rm -rf \"\$TEMP_CLONE\" && \
+                echo '✓ Repository cloned successfully'; \
+              else \
+                echo '❌ Failed to clone repository' && \
+                rm -rf \"\$TEMP_CLONE\" && \
+                exit 1; \
+              fi; \
             fi && \
             if [ -d \"\$BACKUP_DIR\" ]; then \
               echo '📦 Restoring important directories...' && \
