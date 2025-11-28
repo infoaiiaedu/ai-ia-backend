@@ -21,6 +21,17 @@ DEBUG = project_env.get("DEBUG", True)
 ALLOWED_HOSTS = project_env.get("ALLOWED_HOSTS", [])
 CSRF_TRUSTED_ORIGINS = project_env.get("CSRF_TRUSTED_ORIGINS", [])
 
+# CSRF settings for proxy
+CSRF_COOKIE_SECURE = False  # Set to True if using HTTPS
+CSRF_COOKIE_HTTPONLY = False
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# Trust proxy headers
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+SECURE_PROXY_SSL_HEADER = None  # Set to ('HTTP_X_FORWARDED_PROTO', 'https') if using HTTPS
+
 REDIS_URI = project_env.get("REDIS_URI")
 
 
