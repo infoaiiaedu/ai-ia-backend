@@ -1,0 +1,32 @@
+# Development Dockerfile
+FROM python:3.11-slim
+
+# Install dev dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    curl \
+    netcat-openbsd \
+    vim \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/code
+
+ENV PYTHONPATH=/app/code \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+COPY code/requirements.txt .
+
+# Install all dependencies (including dev)
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install -r requirements.txt
+
+COPY code /app/code
+
+RUN mkdir -p /app/storage && \
+    chmod -R 755 /app
+
+EXPOSE 8000
+
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

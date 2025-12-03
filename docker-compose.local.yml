@@ -1,0 +1,106 @@
+# Local development environment
+# Single container setup for both prod and staging
+# Usage: docker-compose -f docker-compose.local.yml up
+
+version: '3.9'
+
+services:
+  # PostgreSQL
+  postgresql:
+    image: postgres:16-alpine
+    container_name: aiia_dev_postgresql
+    environment:
+      POSTGRES_USER: aiia_dev
+      POSTGRES_PASSWORD: dev_password_123
+      POSTGRES_INITDB_ARGS: "-c max_connections=50 -c shared_buffers=128MB -c effective_cache_size=256MB"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - aiia_dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiia_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7.2-alpine
+    container_name: aiia_dev_redis
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data_dev:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - aiia_dev_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Development
+  django:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: aiia_dev_django
+    command: >
+      /bin/sh -c "
+      python manage.py migrate --noinput &&
+      python manage.py runserver 0.0.0.0:8000
+      "
+    environment:
+      DJANGO_SETTINGS_MODULE: main.settings
+      DJANGO_SECRET_KEY: dev-insecure-key-do-not-use-in-production
+      DB_ENGINE: postgresql
+      DB_HOST: postgresql
+      DB_PORT: 5432
+      DB_NAME: aiia_dev
+      DB_USER: aiia_dev
+      DB_PASSWORD: dev_password_123
+      REDIS_URI: redis://redis:6379/0
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,host.docker.internal
+      DJANGO_DEBUG: "true"
+      ENVIRONMENT: development
+    volumes:
+      - ./code:/app/code
+      - ./storage_dev:/app/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - aiia_dev_network
+    stdin_open: true
+    tty: true
+
+  # Nginx (optional for local testing)
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: aiia_dev_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
+      - ./storage_dev:/app/storage:ro
+    depends_on:
+      django:
+        condition: service_started
+    networks:
+      - aiia_dev_network
+
+volumes:
+  pgdata_dev:
+  redis_data_dev:
+
+networks:
+  aiia_dev_network:
+    driver: bridge

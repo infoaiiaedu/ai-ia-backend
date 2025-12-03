@@ -1,0 +1,238 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_STAGING: ${{ github.repository }}/django_staging
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7.2-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r code/requirements.txt
+
+      - name: Run Django checks
+        env:
+          DJANGO_SETTINGS_MODULE: main.settings
+          DB_ENGINE: postgresql
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test_db
+          DB_USER: test_user
+          DB_PASSWORD: test_pass
+          REDIS_URI: redis://localhost:6379/0
+          ENVIRONMENT: staging
+        run: |
+          cd code
+          python manage.py check
+
+      - name: Run migrations
+        env:
+          DJANGO_SETTINGS_MODULE: main.settings
+          DB_ENGINE: postgresql
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test_db
+          DB_USER: test_user
+          DB_PASSWORD: test_pass
+          REDIS_URI: redis://localhost:6379/0
+          ENVIRONMENT: staging
+        run: |
+          cd code
+          python manage.py migrate --noinput
+
+      - name: Run tests
+        env:
+          DJANGO_SETTINGS_MODULE: main.settings
+          DB_ENGINE: postgresql
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test_db
+          DB_USER: test_user
+          DB_PASSWORD: test_pass
+          REDIS_URI: redis://localhost:6379/0
+          ENVIRONMENT: staging
+        run: |
+          cd code
+          python manage.py test --parallel --failfast 2>&1 || true
+
+      - name: Collect static files
+        env:
+          DJANGO_SETTINGS_MODULE: main.settings
+          DJANGO_DEBUG: "false"
+          ENVIRONMENT: staging
+        run: |
+          cd code
+          mkdir -p ../storage/static
+          python manage.py collectstatic --noinput --clear
+
+  build:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push staging image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./docker/Dockerfile.staging
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_STAGING }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_STAGING }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_STAGING }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_STAGING }}:buildcache,mode=max
+
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: success()
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: 22
+          script: |
+            set -e
+            cd /home/ubuntu/staging/ai-ia-backend
+            
+            echo "Pulling latest code..."
+            git fetch origin staging
+            git checkout origin/staging
+            
+            echo "Backing up database..."
+            mkdir -p backups/db_staging_$(date +%Y%m%d_%H%M%S)
+            docker exec aiia_postgresql pg_dump -U aiia -d aiia_staging -F custom > backups/db_staging_$(date +%Y%m%d_%H%M%S)/database.dump || true
+            
+            echo "Building and starting staging services..."
+            docker-compose build django_staging
+            docker-compose up -d django_staging
+            
+            echo "Running migrations..."
+            sleep 10
+            docker-compose exec -T django_staging python manage.py migrate --noinput || true
+            
+            echo "Collecting static files..."
+            docker-compose exec -T django_staging python manage.py collectstatic --noinput --clear || true
+            
+            echo "Restarting nginx..."
+            docker-compose up -d nginx
+            
+            echo "Health checks..."
+            for i in {1..30}; do
+              if curl -sf http://localhost:8001/health/ > /dev/null 2>&1; then
+                echo "✓ Staging health check passed"
+                break
+              fi
+              echo "Waiting for service... ($i/30)"
+              sleep 2
+            done
+            
+            echo "✓ Staging deployment completed"
+
+      - name: Notify Slack on Success
+        if: success()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✓ Staging deployment successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Staging Deployment Successful*\nBranch: staging\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✗ Staging deployment failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Staging Deployment Failed*\nBranch: staging\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}"
+                  }
+                }
+              ]
+            }

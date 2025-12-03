@@ -1,103 +1,297 @@
+# Production & Staging Orchestration
+# Single-stack approach: shared DB/Redis, separate Django containers
+# Memory target: ~550MB total
+version: '3.9'
+
 services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: main:1.0
-    container_name: main_app
-    restart: always
-    command: >
-      /bin/sh -c "
-      echo 'Waiting for Postgres...' &&
-      until pg_isready -h psql -U postgres; do
-        sleep 2
-      done &&
-      echo 'Postgres is ready!' &&
-      python manage.py migrate --noinput &&
-      python manage.py collectstatic --noinput &&
-      exec gunicorn main.wsgi:application --bind 0.0.0.0:5000 --workers 2 --threads 2 --log-level info
-      "
-    volumes:
-      - ./code:/app/code
-      - ./storage:/app/storage
-      - ./config:/app/config:ro
-    depends_on:
-      psql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - ai_network
+  # ==================== SHARED SERVICES ====================
+  
+  postgresql:
+    image: postgres:16-alpine
+    container_name: aiia_postgresql
+    restart: unless-stopped
     environment:
-      - PYTHONPATH=/app/code
+      POSTGRES_MULTIPLE_DATABASES: "aiia_prod,aiia_staging"
+      POSTGRES_USER: aiia
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeMe123!}
+      # Memory optimization for 512MB constraint
+      POSTGRES_INITDB_ARGS: "-c max_connections=50 -c shared_buffers=128MB -c effective_cache_size=256MB -c maintenance_work_mem=32MB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=10 -c work_mem=2621kB"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    networks:
+      - aiia_network
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      test: ["CMD-SHELL", "pg_isready -U aiia -d aiia_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 200M
+        reservations:
+          cpus: '0.5'
+          memory: 150M
+
+  # PgBouncer for connection pooling (critical for low-memory environment)
+  pgbouncer:
+    image: pgbouncer:latest
+    container_name: aiia_pgbouncer
+    restart: unless-stopped
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    volumes:
+      - ./docker/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./docker/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    networks:
+      - aiia_network
+    ports:
+      - "6432:6432"
+    healthcheck:
+      test: ["CMD", "psql", "-U", "aiia", "-d", "aiia_prod", "-c", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 30M
+        reservations:
+          cpus: '0.1'
+          memory: 20M
 
   redis:
     image: redis:7.2-alpine
-    container_name: ai_redis
-    restart: always
-    command: redis-server --appendonly yes
+    container_name: aiia_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 50mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
     volumes:
-      - redis-data:/data
+      - redis_data:/data
     networks:
-      - ai_network
+      - aiia_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 50M
+        reservations:
+          cpus: '0.2'
+          memory: 40M
 
-  psql:
-    image: postgres:16-alpine
-    container_name: ai_psql
-    restart: always
+  # ==================== PRODUCTION ENVIRONMENT ====================
+
+  django_prod:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prod
+      cache_from:
+        - django_prod:latest
+    image: django_prod:latest
+    container_name: aiia_django_prod
+    restart: unless-stopped
+    command: >
+      /bin/sh -c "
+      python manage.py migrate --noinput &&
+      python manage.py collectstatic --noinput --clear &&
+      gunicorn main.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers 2
+        --threads 2
+        --worker-class gthread
+        --worker-tmp-dir /dev/shm
+        --max-requests 1000
+        --max-requests-jitter 100
+        --timeout 30
+        --access-logfile -
+        --error-logfile -
+      "
     environment:
-      POSTGRES_DB: ai_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      DJANGO_SETTINGS_MODULE: main.settings
+      DJANGO_SECRET_KEY: ${SECRET_KEY}
+      DB_ENGINE: postgresql
+      DB_HOST: pgbouncer
+      DB_PORT: 6432
+      DB_NAME: aiia_prod
+      DB_USER: aiia
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_URI: ${REDIS_URI:-redis://redis:6379/0}
+      DJANGO_ALLOWED_HOSTS: ${ALLOWED_HOSTS:-eduaiia.com,www.eduaiia.com}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://eduaiia.com,https://www.eduaiia.com}
+      DJANGO_DEBUG: "false"
+      ENVIRONMENT: production
+      SECURE_SSL_REDIRECT: "true"
     volumes:
-      - ./storage/db/pgdata:/var/lib/postgresql/data
+      - ./code:/app/code
+      - storage_prod:/app/storage
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
-      - ai_network
+      - aiia_network
+    expose:
+      - "8000"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 150M
+        reservations:
+          cpus: '0.5'
+          memory: 120M
+
+  # ==================== STAGING ENVIRONMENT ====================
+
+  django_staging:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.staging
+      cache_from:
+        - django_staging:latest
+    image: django_staging:latest
+    container_name: aiia_django_staging
+    restart: unless-stopped
+    command: >
+      /bin/sh -c "
+      python manage.py migrate --noinput &&
+      python manage.py collectstatic --noinput --clear &&
+      gunicorn main.wsgi:application
+        --bind 0.0.0.0:8001
+        --workers 1
+        --threads 2
+        --worker-class gthread
+        --worker-tmp-dir /dev/shm
+        --max-requests 500
+        --timeout 30
+        --access-logfile -
+        --error-logfile -
+      "
+    environment:
+      DJANGO_SETTINGS_MODULE: main.settings
+      DJANGO_SECRET_KEY: ${SECRET_KEY_STAGING:-staging-key-change-me}
+      DB_ENGINE: postgresql
+      DB_HOST: pgbouncer
+      DB_PORT: 6432
+      DB_NAME: aiia_staging
+      DB_USER: aiia
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_URI: ${REDIS_URI_STAGING:-redis://redis:6379/1}
+      DJANGO_ALLOWED_HOSTS: ${ALLOWED_HOSTS_STAGING:-staging.eduaiia.com}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS_STAGING:-https://staging.eduaiia.com}
+      DJANGO_DEBUG: "false"
+      ENVIRONMENT: staging
+      SECURE_SSL_REDIRECT: "false"
+    volumes:
+      - ./code:/app/code
+      - storage_staging:/app/storage
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - aiia_network
+    expose:
+      - "8001"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8001/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 100M
+        reservations:
+          cpus: '0.3'
+          memory: 80M
+
+  # ==================== REVERSE PROXY ====================
 
   nginx:
     image: nginx:1.25-alpine
-    container_name: ai_nginx
-    restart: always
+    container_name: aiia_nginx
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./storage:/app/storage:ro
+      - ./docker/nginx/prod.conf:/etc/nginx/conf.d/prod.conf:ro
+      - ./docker/nginx/staging.conf:/etc/nginx/conf.d/staging.conf:ro
+      - ./docker/nginx/monitoring.conf:/etc/nginx/conf.d/monitoring.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - storage_prod:/app/storage_prod:ro
+      - storage_staging:/app/storage_staging:ro
+      - ./logs/nginx:/var/log/nginx
     depends_on:
-      app:
+      django_prod:
+        condition: service_healthy
+      django_staging:
         condition: service_healthy
     networks:
-      - ai_network
+      - aiia_network
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 50M
+        reservations:
+          cpus: '0.2'
+          memory: 40M
 
 volumes:
-  redis-data:
+  pgdata:
+    driver: local
+  redis_data:
+    driver: local
+  storage_prod:
+    driver: local
+  storage_staging:
+    driver: local
 
 networks:
-  ai_network:
+  aiia_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

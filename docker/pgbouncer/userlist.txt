@@ -1,0 +1,3 @@
+# PgBouncer user authentication file
+# Format: "username" "password"
+"aiia" "md5<generated_hash>"
