@@ -259,6 +259,30 @@ jobs:
               ]
             }
 
+      - name: Collect remote diagnostics
+        if: failure()
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: 22
+          script: |
+            set -e
+            DEPLOY_DIR="/home/ubuntu/staging/ai-ia-backend"
+            cd "$DEPLOY_DIR" || true
+            echo "== docker ps -a =="
+            docker ps -a || true
+            echo "== docker-compose ps =="
+            docker-compose ps || true
+            echo "== aiia_pgbouncer health =="
+            docker inspect --format '{{json .State.Health}}' aiia_pgbouncer || true
+            echo "== aiia_pgbouncer logs (tail 500) =="
+            docker logs --tail 500 aiia_pgbouncer || true
+            echo "== aiia_postgresql logs (tail 500) =="
+            docker logs --tail 500 aiia_postgresql || true
+            echo "== End diagnostics =="
+
       - name: Notify Slack on Failure
         if: failure()
         uses: slackapi/slack-github-action@v1.24.0
