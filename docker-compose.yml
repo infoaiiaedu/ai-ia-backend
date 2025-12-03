@@ -54,11 +54,11 @@ services:
     ports:
       - "6432:6432"
     healthcheck:
-      test: ["CMD", "psql", "-U", "aiia", "-d", "aiia_prod", "-c", "SELECT 1"]
+      test: ["CMD", "psql", "-U", "aiia", "-h", "localhost", "-p", "6432", "-c", "SELECT 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 30s
     deploy:
       resources:
         limits:
