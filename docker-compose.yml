@@ -40,7 +40,7 @@ services:
 
   # PgBouncer for connection pooling (critical for low-memory environment)
   pgbouncer:
-    image: pgbouncer:latest
+    image: edoburu/pgbouncer:latest
     container_name: aiia_pgbouncer
     restart: unless-stopped
     depends_on:

@@ -202,7 +202,7 @@ jobs:
             
             echo "Building and starting staging services..."
             docker-compose build django_staging
-            docker-compose up -d django_staging
+            docker-compose up -d --remove-orphans django_staging
             
             echo "Running migrations..."
             sleep 10
