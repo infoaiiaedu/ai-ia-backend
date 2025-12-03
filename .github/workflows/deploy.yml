@@ -188,7 +188,8 @@ jobs:
             echo "Cleaning up Docker resources..."
             docker-compose down 2>/dev/null || true
             docker network rm ai-ia-backend_aiia_network 2>/dev/null || true
-            docker network prune -f --volumes || true
+            docker network prune -f || true
+            docker volume prune -f || true
             
             echo "Backing up database..."
             mkdir -p backups/db_prod_$(date +%Y%m%d_%H%M%S)
