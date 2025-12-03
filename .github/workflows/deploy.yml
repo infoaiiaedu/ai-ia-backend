@@ -207,10 +207,17 @@ jobs:
             
             echo "Building and starting production services..."
             docker-compose build django_prod
-            docker-compose up -d --remove-orphans django_prod
+            docker-compose up -d --remove-orphans
             
-            echo "Running migrations..."
-            sleep 10
+            echo "Waiting for services to be healthy..."
+            for i in {1..60}; do
+              if docker-compose ps | grep -E 'aiia_(postgresql|redis|pgbouncer)' | grep -q 'healthy'; then
+                echo "✓ Dependency services are healthy"
+                break
+              fi
+              echo "Waiting... ($i/60)"
+              sleep 2
+            done
             docker-compose exec -T django_prod python manage.py migrate --noinput || true
             
             echo "Collecting static files..."
