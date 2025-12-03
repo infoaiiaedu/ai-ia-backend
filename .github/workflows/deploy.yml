@@ -168,11 +168,27 @@ jobs:
           port: 22
           script: |
             set -e
-            cd /home/ubuntu/main/ai-ia-backend
+            
+            # Ensure deployment directory exists
+            DEPLOY_DIR="/home/ubuntu/main/ai-ia-backend"
+            if [ ! -d "$DEPLOY_DIR" ]; then
+              echo "Creating deployment directory: $DEPLOY_DIR"
+              mkdir -p "$DEPLOY_DIR"
+              cd "$DEPLOY_DIR"
+              git init
+              git remote add origin https://github.com/infoaiiaedu/ai-ia-backend
+            else
+              cd "$DEPLOY_DIR"
+            fi
             
             echo "Pulling latest code..."
             git fetch origin main
             git checkout origin/main
+            
+            echo "Cleaning up Docker resources..."
+            docker-compose down 2>/dev/null || true
+            docker network rm ai-ia-backend_aiia_network 2>/dev/null || true
+            docker network prune -f --volumes || true
             
             echo "Backing up database..."
             mkdir -p backups/db_prod_$(date +%Y%m%d_%H%M%S)
