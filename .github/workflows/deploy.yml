@@ -187,7 +187,17 @@ jobs:
             
             echo "Cleaning up Docker resources..."
             docker-compose down 2>/dev/null || true
+            
+            # Remove all networks that might conflict
             docker network rm ai-ia-backend_aiia_network 2>/dev/null || true
+            
+            # Get all networks with the problematic subnet and remove them
+            CONFLICTING_NETS=$(docker network ls --filter driver=bridge --format "{{.Name}}" | xargs -I {} docker network inspect {} --format "{{.Name}} {{.IPAM.Config}}" 2>/dev/null | grep "172.20" | cut -d' ' -f1 | sort -u)
+            for net in $CONFLICTING_NETS; do
+              echo "Removing conflicting network: $net"
+              docker network rm "$net" 2>/dev/null || true
+            done
+            
             docker network prune -f || true
             docker volume prune -f || true
             
