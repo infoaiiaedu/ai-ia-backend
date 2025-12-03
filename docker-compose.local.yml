@@ -2,8 +2,6 @@
 # Single container setup for both prod and staging
 # Usage: docker-compose -f docker-compose.local.yml up
 
-version: '3.9'
-
 services:
   # PostgreSQL
   postgresql:
@@ -70,7 +68,7 @@ services:
       - ./code:/app/code
       - ./storage_dev:/app/storage
     ports:
-      - "8000:8000"
+      - "9000:8000"
     depends_on:
       postgresql:
         condition: service_healthy
@@ -86,8 +84,8 @@ services:
     image: nginx:1.25-alpine
     container_name: aiia_dev_nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "9080:80"
+      - "9443:443"
     volumes:
       - ./docker/nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
       - ./storage_dev:/app/storage:ro

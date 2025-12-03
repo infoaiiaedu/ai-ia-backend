@@ -1,0 +1,20 @@
+# Docker Compose override for Windows development
+# This file provides Windows-specific fixes
+# Usage: docker-compose -f docker-compose.local.yml -f docker-compose.windows-dev.yml up
+
+services:
+  django:
+    # Windows-specific port override - use 8080 if 8000 is problematic
+    ports:
+      - "8001:8000"
+    # Add Windows-specific fixes
+    environment:
+      PYTHONUNBUFFERED: "1"
+    build:
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+  
+  nginx:
+    ports:
+      - "8080:80"
+      - "8443:443"
