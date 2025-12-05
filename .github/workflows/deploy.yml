@@ -200,10 +200,24 @@ jobs:
             
             docker network prune -f || true
             docker volume prune -f || true
-            
-            echo "Backing up database..."
-            mkdir -p backups/db_prod_$(date +%Y%m%d_%H%M%S)
-            docker exec aiia_postgresql pg_dump -U aiia -d aiia_prod -F custom > backups/db_prod_$(date +%Y%m%d_%H%M%S)/database.dump || true
+            echo "Writing runtime .env file from GitHub Secrets..."
+            set +x
+            cat > .env <<EOF
+DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+SECRET_KEY=${{ secrets.SECRET_KEY }}
+REDIS_URI=${{ secrets.REDIS_URI }}
+ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}
+CSRF_TRUSTED_ORIGINS=${{ secrets.CSRF_TRUSTED_ORIGINS }}
+EOF
+            set -x
+
+            echo "Backing up database (if running)..."
+            if [ "$(docker ps -q -f name=aiia_postgresql)" != "" ]; then
+              mkdir -p backups/db_prod_$(date +%Y%m%d_%H%M%S)
+              docker exec aiia_postgresql pg_dump -U aiia -d aiia_prod -F custom > backups/db_prod_$(date +%Y%m%d_%H%M%S)/database.dump || true
+            else
+              echo "aiia_postgresql container not present — skipping DB backup"
+            fi
             
             echo "Building and starting production services..."
             docker-compose build django_prod
@@ -249,7 +263,7 @@ jobs:
         if: success()
         uses: slackapi/slack-github-action@v1.24.0
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          webhookUrl: ${{ secrets.SLACK_WEBHOOK }}
           payload: |
             {
               "text": "✓ Production deployment successful",
@@ -292,7 +306,7 @@ jobs:
         if: failure()
         uses: slackapi/slack-github-action@v1.24.0
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          webhookUrl: ${{ secrets.SLACK_WEBHOOK }}
           payload: |
             {
               "text": "✗ Production deployment failed",

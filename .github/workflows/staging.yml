@@ -195,57 +195,72 @@ jobs:
             
             docker network prune -f || true
             docker volume prune -f || true
-            
-            echo "Backing up database..."
-            mkdir -p backups/db_staging_$(date +%Y%m%d_%H%M%S)
-            docker exec aiia_postgresql pg_dump -U aiia -d aiia_staging -F custom > backups/db_staging_$(date +%Y%m%d_%H%M%S)/database.dump || true
-            
-            echo "Building and starting staging services..."
-            docker-compose build django_staging
-            docker-compose up -d --remove-orphans
-            
-            echo "Waiting for PostgreSQL to be healthy..."
-            for i in {1..90}; do
-              if docker-compose ps aiia_postgresql | grep -q 'healthy'; then
-                echo "✓ PostgreSQL is healthy"
-                break
-              fi
-              if [ $i -eq 90 ]; then
-                echo "⚠ PostgreSQL not healthy yet, continuing anyway..."
-              fi
-              echo "Waiting for PostgreSQL... ($i/90)"
-              sleep 2
-            done
-            
-            echo "Waiting a bit more for all services to stabilize..."
-            sleep 10
-            
-            docker-compose exec -T django_staging python manage.py migrate --noinput || true
-            
-            echo "Collecting static files..."
-            docker-compose exec -T django_staging python manage.py collectstatic --noinput --clear || true
-            
-            echo "Restarting nginx..."
-            docker-compose up -d nginx
-            
-            echo "Health checks..."
-            for i in {1..30}; do
-              if curl -sf http://localhost:8001/health/ > /dev/null 2>&1; then
-                echo "✓ Staging health check passed"
-                break
-              fi
-              echo "Waiting for service... ($i/30)"
-              sleep 2
-            done
-            
-            echo "✓ Staging deployment completed"
 
-      - name: Notify Slack on Success
-        if: success()
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          payload: |
+            echo "Writing runtime .env file from GitHub Secrets..."
+            set +x
+                        
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            SECRET_KEY_STAGING=${{ secrets.SECRET_KEY_STAGING }}
+            REDIS_URI_STAGING=${{ secrets.REDIS_URI_STAGING }}
+            ALLOWED_HOSTS_STAGING=${{ secrets.ALLOWED_HOSTS_STAGING }}
+            CSRF_TRUSTED_ORIGINS_STAGING=${{ secrets.CSRF_TRUSTED_ORIGINS_STAGING }}
+            EOF
+                        set -x
+
+                        echo "Backing up database (if running)..."
+                        if [ "$(docker ps -q -f name=aiia_postgresql)" != "" ]; then
+                          mkdir -p backups/db_staging_$(date +%Y%m%d_%H%M%S)
+                          docker exec aiia_postgresql pg_dump -U aiia -d aiia_staging -F custom > backups/db_staging_$(date +%Y%m%d_%H%M%S)/database.dump || true
+                        else
+                          echo "aiia_postgresql container not present — skipping DB backup"
+                        fi
+                        
+                        echo "Building and starting staging services..."
+                        docker-compose build django_staging
+                        docker-compose up -d --remove-orphans
+                        
+                        echo "Waiting for PostgreSQL to be healthy..."
+                        for i in {1..90}; do
+                          if docker-compose ps aiia_postgresql | grep -q 'healthy'; then
+                            echo "✓ PostgreSQL is healthy"
+                            break
+                          fi
+                          if [ $i -eq 90 ]; then
+                            echo "⚠ PostgreSQL not healthy yet, continuing anyway..."
+                          fi
+                          echo "Waiting for PostgreSQL... ($i/90)"
+                          sleep 2
+                        done
+                        
+                        echo "Waiting a bit more for all services to stabilize..."
+                        sleep 10
+                        
+                        docker-compose exec -T django_staging python manage.py migrate --noinput || true
+                        
+                        echo "Collecting static files..."
+                        docker-compose exec -T django_staging python manage.py collectstatic --noinput --clear || true
+                        
+                        echo "Restarting nginx..."
+                        docker-compose up -d nginx
+                        
+                        echo "Health checks..."
+                        for i in {1..30}; do
+                          if curl -sf http://localhost:8001/health/ > /dev/null 2>&1; then
+                            echo "✓ Staging health check passed"
+                            break
+                          fi
+                          echo "Waiting for service... ($i/30)"
+                          sleep 2
+                        done
+                        
+                        echo "✓ Staging deployment completed"
+
+                  - name: Notify Slack on Success
+                    if: success()
+                    uses: slackapi/slack-github-action@v1.24.0
+                    with:
+            webhookUrl: ${{ secrets.SLACK_WEBHOOK }}
+            payload: |
             {
               "text": "✓ Staging deployment successful",
               "blocks": [
@@ -287,17 +302,17 @@ jobs:
         if: failure()
         uses: slackapi/slack-github-action@v1.24.0
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          payload: |
-            {
-              "text": "✗ Staging deployment failed",
-              "blocks": [
+              webhookUrl: ${{ secrets.SLACK_WEBHOOK }}
+              payload: |
                 {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Staging Deployment Failed*\nBranch: staging\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}"
+                  "text": "✗ Staging deployment failed",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "mrkdwn",
+                        "text": "*Staging Deployment Failed*\nBranch: staging\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}"
+                      }
                   }
-                }
-              ]
-            }
+                ]
+              }
