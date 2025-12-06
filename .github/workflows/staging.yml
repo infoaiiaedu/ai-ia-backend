@@ -14,6 +14,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging' || github.event_name == 'workflow_dispatch'
     services:
       postgres:
         image: postgres:16-alpine
@@ -147,6 +148,7 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: build
+    if: github.ref == 'refs/heads/staging' || github.event_name == 'workflow_dispatch'
     if: success()
 
     steps:
@@ -198,13 +200,11 @@ jobs:
 
             echo "Writing runtime .env file from GitHub Secrets..."
             set +x
-            cat > .env <<EOF
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            SECRET_KEY_STAGING=${{ secrets.SECRET_KEY_STAGING }}
-            REDIS_URI_STAGING=${{ secrets.REDIS_URI_STAGING }}
-            ALLOWED_HOSTS_STAGING=${{ secrets.ALLOWED_HOSTS_STAGING }}
-            CSRF_TRUSTED_ORIGINS_STAGING=${{ secrets.CSRF_TRUSTED_ORIGINS_STAGING }}
-            EOF
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" > .env
+            echo "SECRET_KEY_STAGING=${{ secrets.SECRET_KEY_STAGING }}" >> .env
+            echo "REDIS_URI_STAGING=${{ secrets.REDIS_URI_STAGING }}" >> .env
+            echo "ALLOWED_HOSTS_STAGING=${{ secrets.ALLOWED_HOSTS_STAGING }}" >> .env
+            echo "CSRF_TRUSTED_ORIGINS_STAGING=${{ secrets.CSRF_TRUSTED_ORIGINS_STAGING }}" >> .env
             set -x
 
             echo "Backing up database (if running)..."
@@ -234,16 +234,9 @@ BUILDEOF
             docker compose -f docker-compose.staging.yml up -d --remove-orphans || {
               echo "Startup failed, saving failure status..."
               mkdir -p .deployments
-              cat > .deployments/last_staging.json <<'STARTEOF'
-{
-  "status": "failed",
-  "environment": "staging",
-  "branch": "staging",
-  "commit": "${{ github.sha }}",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "message": "Docker compose up failed"
-}
-STARTEOF
+              COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+              TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+              printf '{\n  "status": "failed",\n  "environment": "staging",\n  "branch": "staging",\n  "commit": "%s",\n  "commit_short": "%s",\n  "author": "%s",\n  "timestamp": "%s",\n  "message": "Docker compose up failed"\n}' "${{ github.sha }}" "$COMMIT_SHORT" "${{ github.actor }}" "$TIMESTAMP" > .deployments/last_staging.json
               exit 1
             }
             
@@ -285,34 +278,14 @@ STARTEOF
             
             # Save deployment status for monitoring dashboard
             mkdir -p .deployments
+            COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+            TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             if [ "$HEALTH_CHECK_PASSED" = true ]; then
               echo "✓ Staging deployment completed"
-              cat > .deployments/last_staging.json <<EOF
-{
-  "status": "success",
-  "environment": "staging",
-  "branch": "staging",
-  "commit": "${{ github.sha }}",
-  "commit_short": "${{ github.sha }}",
-  "author": "${{ github.actor }}",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "message": "Staging deployment successful"
-}
-EOF
+              printf '{\n  "status": "success",\n  "environment": "staging",\n  "branch": "staging",\n  "commit": "%s",\n  "commit_short": "%s",\n  "author": "%s",\n  "timestamp": "%s",\n  "message": "Staging deployment successful"\n}' "${{ github.sha }}" "$COMMIT_SHORT" "${{ github.actor }}" "$TIMESTAMP" > .deployments/last_staging.json
             else
               echo "✗ Staging health check failed"
-              cat > .deployments/last_staging.json <<EOF
-{
-  "status": "failed",
-  "environment": "staging",
-  "branch": "staging",
-  "commit": "${{ github.sha }}",
-  "commit_short": "${{ github.sha }}",
-  "author": "${{ github.actor }}",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "message": "Health check failed after deployment"
-}
-EOF
+              printf '{\n  "status": "failed",\n  "environment": "staging",\n  "branch": "staging",\n  "commit": "%s",\n  "commit_short": "%s",\n  "author": "%s",\n  "timestamp": "%s",\n  "message": "Health check failed after deployment"\n}' "${{ github.sha }}" "$COMMIT_SHORT" "${{ github.actor }}" "$TIMESTAMP" > .deployments/last_staging.json
               exit 1
             fi
 
@@ -352,15 +325,6 @@ EOF
             DEPLOY_DIR="/home/ubuntu/staging/ai-ia-backend"
             cd "$DEPLOY_DIR" || true
             mkdir -p .deployments
-            cat > .deployments/last_staging.json <<'DEPLOYEOF'
-{
-  "status": "failed",
-  "environment": "staging",
-  "branch": "staging",
-  "commit": "${{ github.sha }}",
-  "commit_short": "${{ github.sha }}",
-  "author": "${{ github.actor }}",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "message": "Staging deployment failed - check logs for details"
-}
-DEPLOYEOF
+            COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+            TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            printf '{\n  "status": "failed",\n  "environment": "staging",\n  "branch": "staging",\n  "commit": "%s",\n  "commit_short": "%s",\n  "author": "%s",\n  "timestamp": "%s",\n  "message": "Staging deployment failed - check logs for details"\n}' "${{ github.sha }}" "$COMMIT_SHORT" "${{ github.actor }}" "$TIMESTAMP" > .deployments/last_staging.json
