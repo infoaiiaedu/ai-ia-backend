@@ -113,6 +113,7 @@ jobs:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
     needs: test
+    if: github.ref == 'refs/heads/staging' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       packages: write
@@ -148,8 +149,7 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/staging' || github.event_name == 'workflow_dispatch'
-    if: success()
+    if: (github.ref == 'refs/heads/staging' || github.event_name == 'workflow_dispatch') && success()
 
     steps:
       - uses: actions/checkout@v4
@@ -219,16 +219,9 @@ jobs:
             docker compose -f docker-compose.staging.yml build django_staging || {
               echo "Build failed, saving failure status..."
               mkdir -p .deployments
-              cat > .deployments/last_staging.json <<'BUILDEOF'
-{
-  "status": "failed",
-  "environment": "staging",
-  "branch": "staging",
-  "commit": "${{ github.sha }}",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "message": "Docker build failed"
-}
-BUILDEOF
+              COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+              TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+              printf '{\n  "status": "failed",\n  "environment": "staging",\n  "branch": "staging",\n  "commit": "%s",\n  "commit_short": "%s",\n  "author": "%s",\n  "timestamp": "%s",\n  "message": "Docker build failed"\n}' "${{ github.sha }}" "$COMMIT_SHORT" "${{ github.actor }}" "$TIMESTAMP" > .deployments/last_staging.json
               exit 1
             }
             docker compose -f docker-compose.staging.yml up -d --remove-orphans || {
