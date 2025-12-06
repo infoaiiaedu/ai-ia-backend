@@ -199,11 +199,12 @@ jobs:
             echo "Writing runtime .env file from GitHub Secrets..."
             set +x
             cat > .env <<EOF
-DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-SECRET_KEY_STAGING=${{ secrets.SECRET_KEY_STAGING }}
-REDIS_URI_STAGING=${{ secrets.REDIS_URI_STAGING }}
-ALLOWED_HOSTS_STAGING=${{ secrets.ALLOWED_HOSTS_STAGING }}
-CSRF_TRUSTED_ORIGINS_STAGING=${{ secrets.CSRF_TRUSTED_ORIGINS_STAGING }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            SECRET_KEY_STAGING=${{ secrets.SECRET_KEY_STAGING }}
+            REDIS_URI_STAGING=${{ secrets.REDIS_URI_STAGING }}
+            ALLOWED_HOSTS_STAGING=${{ secrets.ALLOWED_HOSTS_STAGING }}
+            CSRF_TRUSTED_ORIGINS_STAGING=${{ secrets.CSRF_TRUSTED_ORIGINS_STAGING }}
+            EOF
             set -x
 
             echo "Backing up database (if running)..."
