@@ -186,7 +186,7 @@ jobs:
             git checkout origin/main
             
             echo "Cleaning up Docker resources..."
-            docker-compose -f docker-compose.prod.yml down 2>/dev/null || true
+            docker compose -f docker-compose.prod.yml down 2>/dev/null || true
             
             # Remove all networks that might conflict
             docker network rm ai-ia-backend_aiia_network 2>/dev/null || true
@@ -220,12 +220,12 @@ EOF
             fi
             
             echo "Building and starting production services..."
-            docker-compose -f docker-compose.prod.yml build django_prod
-            docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml build django_prod
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
             
             echo "Waiting for PostgreSQL to be healthy..."
             for i in {1..90}; do
-              if docker-compose -f docker-compose.prod.yml ps aiia_prod_postgresql | grep -q 'healthy'; then
+              if docker compose -f docker-compose.prod.yml ps aiia_prod_postgresql | grep -q 'healthy'; then
                 echo "✓ PostgreSQL is healthy"
                 break
               fi
@@ -239,13 +239,13 @@ EOF
             echo "Waiting a bit more for all services to stabilize..."
             sleep 10
             
-            docker-compose -f docker-compose.prod.yml exec -T django_prod python manage.py migrate --noinput || true
+            docker compose -f docker-compose.prod.yml exec -T django_prod python manage.py migrate --noinput || true
             
             echo "Collecting static files..."
-            docker-compose -f docker-compose.prod.yml exec -T django_prod python manage.py collectstatic --noinput --clear || true
+            docker compose -f docker-compose.prod.yml exec -T django_prod python manage.py collectstatic --noinput --clear || true
             
             echo "Restarting nginx..."
-            docker-compose -f docker-compose.prod.yml up -d nginx
+            docker compose -f docker-compose.prod.yml up -d nginx
             
             echo "Health checks..."
             for i in {1..30}; do
@@ -261,9 +261,9 @@ EOF
 
       - name: Notify Slack on Success
         if: success()
-        uses: slackapi/slack-github-action@v1.24.0
+        uses: slackapi/slack-github-action@v1.27.0
         with:
-          webhookUrl: ${{ secrets.SLACK_WEBHOOK }}
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
           payload: |
             {
               "text": "✓ Production deployment successful",
@@ -292,8 +292,8 @@ EOF
             cd "$DEPLOY_DIR" || true
             echo "== docker ps -a =="
             docker ps -a || true
-            echo "== docker-compose ps =="
-            docker-compose ps || true
+            echo "== docker compose ps =="
+            docker compose -f docker-compose.prod.yml ps || true
             echo "== aiia_pgbouncer health =="
             docker inspect --format '{{json .State.Health}}' aiia_pgbouncer || true
             echo "== aiia_pgbouncer logs (tail 500) =="
@@ -304,9 +304,9 @@ EOF
 
       - name: Notify Slack on Failure
         if: failure()
-        uses: slackapi/slack-github-action@v1.24.0
+        uses: slackapi/slack-github-action@v1.27.0
         with:
-          webhookUrl: ${{ secrets.SLACK_WEBHOOK }}
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
           payload: |
             {
               "text": "✗ Production deployment failed",
