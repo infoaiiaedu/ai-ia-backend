@@ -258,25 +258,21 @@ EOF
             done
             
             echo "✓ Production deployment completed"
-
-      - name: Notify Slack on Success
-        if: success()
-        uses: slackapi/slack-github-action@v1.27.0
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          payload: |
-            {
-              "text": "✓ Production deployment successful",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Production Deployment Successful*\nBranch: main\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
+            
+            # Save deployment status for monitoring dashboard
+            mkdir -p .deployments
+            cat > .deployments/last_production.json <<EOF
+{
+  "status": "success",
+  "environment": "production",
+  "branch": "main",
+  "commit": "${{ github.sha }}",
+  "commit_short": "${{ github.sha }}",
+  "author": "${{ github.actor }}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "message": "Production deployment successful"
+}
+EOF
 
       - name: Collect remote diagnostics
         if: failure()
@@ -302,21 +298,27 @@ EOF
             docker logs --tail 500 aiia_postgresql || true
             echo "== End diagnostics =="
 
-      - name: Notify Slack on Failure
+      - name: Save Deployment Status on Failure
         if: failure()
-        uses: slackapi/slack-github-action@v1.27.0
+        uses: appleboy/ssh-action@master
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          payload: |
-            {
-              "text": "✗ Production deployment failed",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Production Deployment Failed*\nBranch: main\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: 22
+          script: |
+            DEPLOY_DIR="/home/ubuntu/main/ai-ia-backend"
+            cd "$DEPLOY_DIR" || true
+            mkdir -p .deployments
+            cat > .deployments/last_production.json <<'DEPLOYEOF'
+{
+  "status": "failed",
+  "environment": "production",
+  "branch": "main",
+  "commit": "${{ github.sha }}",
+  "commit_short": "${{ github.sha }}",
+  "author": "${{ github.actor }}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "message": "Production deployment failed - check logs for details"
+}
+DEPLOYEOF

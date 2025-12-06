@@ -229,6 +229,11 @@
             </div>
         </div>
         
+        <div class="card" style="margin-bottom: 20px;">
+            <h2>🚀 Deployment Status</h2>
+            <div id="deploymentStatus" class="loading">Loading deployment info...</div>
+        </div>
+        
         <div class="card">
             <h2>📝 Recent Logs (Last 50 lines)</h2>
             <div class="logs-container" id="logsContainer">
@@ -342,6 +347,42 @@
                     </div>
                 `).join('');
                 document.getElementById('servicesGrid').innerHTML = servicesHtml;
+                
+                // Deployment Status
+                const deployments = data.deployments || {};
+                let deployHtml = '';
+                for (const [env, deploy] of Object.entries(deployments)) {
+                    if (deploy.error) {
+                        deployHtml += `<div class="metric"><span class="metric-label">${env}</span><span class="metric-value status-error">Error loading</span></div>`;
+                        continue;
+                    }
+                    const statusClass = deploy.status === 'success' ? 'status-ok' : deploy.status === 'failed' ? 'status-error' : 'status-warning';
+                    const statusIcon = deploy.status === 'success' ? '✓' : deploy.status === 'failed' ? '✗' : '?';
+                    deployHtml += `
+                        <div class="metric">
+                            <span class="metric-label">${env.charAt(0).toUpperCase() + env.slice(1)}</span>
+                            <span class="metric-value ${statusClass}">${statusIcon} ${deploy.status || 'unknown'}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Last Deploy</span>
+                            <span class="metric-value">${deploy.timestamp ? new Date(deploy.timestamp).toLocaleString() : 'N/A'}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Commit</span>
+                            <span class="metric-value" style="font-family: monospace; font-size: 0.9em;">${deploy.commit_short || deploy.commit || 'N/A'}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Author</span>
+                            <span class="metric-value">${deploy.author || 'N/A'}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Message</span>
+                            <span class="metric-value">${escapeHtml(deploy.message || 'N/A')}</span>
+                        </div>
+                        <div style="margin: 15px 0; border-top: 1px solid #2d3748;"></div>
+                    `;
+                }
+                document.getElementById('deploymentStatus').innerHTML = deployHtml || '<div class="loading">No deployment data available</div>';
                 
                 // Logs
                 const logs = data.logs || [];

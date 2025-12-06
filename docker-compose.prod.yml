@@ -1,7 +1,7 @@
 # Production Environment Only
 # Deployed to /home/ubuntu/main/ai-ia-backend
 # Serves: eduaiia.com, www.eduaiia.com
-version: '3.9'
+# Note: version field is obsolete in Docker Compose v2, but kept for compatibility
 
 services:
   # ==================== SHARED SERVICES ====================

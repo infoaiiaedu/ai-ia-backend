@@ -216,8 +216,36 @@ jobs:
             fi
             
             echo "Building and starting staging services..."
-            docker compose -f docker-compose.staging.yml build django_staging
-            docker compose -f docker-compose.staging.yml up -d --remove-orphans
+            docker compose -f docker-compose.staging.yml build django_staging || {
+              echo "Build failed, saving failure status..."
+              mkdir -p .deployments
+              cat > .deployments/last_staging.json <<'BUILDEOF'
+{
+  "status": "failed",
+  "environment": "staging",
+  "branch": "staging",
+  "commit": "${{ github.sha }}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "message": "Docker build failed"
+}
+BUILDEOF
+              exit 1
+            }
+            docker compose -f docker-compose.staging.yml up -d --remove-orphans || {
+              echo "Startup failed, saving failure status..."
+              mkdir -p .deployments
+              cat > .deployments/last_staging.json <<'STARTEOF'
+{
+  "status": "failed",
+  "environment": "staging",
+  "branch": "staging",
+  "commit": "${{ github.sha }}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "message": "Docker compose up failed"
+}
+STARTEOF
+              exit 1
+            }
             
             echo "Waiting for PostgreSQL to be healthy..."
             for i in {1..90}; do
@@ -244,35 +272,49 @@ jobs:
             docker compose -f docker-compose.staging.yml up -d nginx
             
             echo "Health checks..."
+            HEALTH_CHECK_PASSED=false
             for i in {1..30}; do
               if curl -sf http://localhost:8001/health/ > /dev/null 2>&1; then
                 echo "✓ Staging health check passed"
+                HEALTH_CHECK_PASSED=true
                 break
               fi
               echo "Waiting for service... ($i/30)"
               sleep 2
             done
             
-            echo "✓ Staging deployment completed"
-
-      - name: Notify Slack on Success
-        if: success()
-        uses: slackapi/slack-github-action@v1.27.0
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          payload: |
-            {
-              "text": "✓ Staging deployment successful",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Staging Deployment Successful*\nBranch: staging\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
+            # Save deployment status for monitoring dashboard
+            mkdir -p .deployments
+            if [ "$HEALTH_CHECK_PASSED" = true ]; then
+              echo "✓ Staging deployment completed"
+              cat > .deployments/last_staging.json <<EOF
+{
+  "status": "success",
+  "environment": "staging",
+  "branch": "staging",
+  "commit": "${{ github.sha }}",
+  "commit_short": "${{ github.sha }}",
+  "author": "${{ github.actor }}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "message": "Staging deployment successful"
+}
+EOF
+            else
+              echo "✗ Staging health check failed"
+              cat > .deployments/last_staging.json <<EOF
+{
+  "status": "failed",
+  "environment": "staging",
+  "branch": "staging",
+  "commit": "${{ github.sha }}",
+  "commit_short": "${{ github.sha }}",
+  "author": "${{ github.actor }}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "message": "Health check failed after deployment"
+}
+EOF
+              exit 1
+            fi
 
       - name: Collect remote diagnostics
         if: failure()
@@ -298,21 +340,27 @@ jobs:
             docker logs --tail 500 aiia_staging_postgresql || true
             echo "== End diagnostics =="
 
-      - name: Notify Slack on Failure
+      - name: Save Deployment Status on Failure
         if: failure()
-        uses: slackapi/slack-github-action@v1.27.0
+        uses: appleboy/ssh-action@master
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          payload: |
-            {
-              "text": "✗ Staging deployment failed",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Staging Deployment Failed*\nBranch: staging\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: 22
+          script: |
+            DEPLOY_DIR="/home/ubuntu/staging/ai-ia-backend"
+            cd "$DEPLOY_DIR" || true
+            mkdir -p .deployments
+            cat > .deployments/last_staging.json <<'DEPLOYEOF'
+{
+  "status": "failed",
+  "environment": "staging",
+  "branch": "staging",
+  "commit": "${{ github.sha }}",
+  "commit_short": "${{ github.sha }}",
+  "author": "${{ github.actor }}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "message": "Staging deployment failed - check logs for details"
+}
+DEPLOYEOF

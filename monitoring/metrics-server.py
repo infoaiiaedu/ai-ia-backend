@@ -33,6 +33,29 @@ class MetricsHandler(BaseHTTPRequestHandler):
         """Collect system and service metrics"""
         metrics = {}
         
+        # Deployment status
+        try:
+            import json
+            import os
+            from pathlib import Path
+            
+            # Try to read deployment status files
+            deploy_status = {}
+            for env in ['production', 'staging']:
+                status_file = Path(f'/home/ubuntu/{env}/ai-ia-backend/.deployments/last_{env}.json')
+                if status_file.exists():
+                    with open(status_file, 'r') as f:
+                        deploy_status[env] = json.load(f)
+                else:
+                    deploy_status[env] = {
+                        'status': 'unknown',
+                        'timestamp': None,
+                        'message': 'No deployment recorded'
+                    }
+            metrics['deployments'] = deploy_status
+        except Exception as e:
+            metrics['deployments'] = {'error': str(e)}
+        
         # System metrics
         try:
             result = subprocess.run(['top', '-bn1'], capture_output=True, text=True, timeout=5)
@@ -123,6 +146,40 @@ class MetricsHandler(BaseHTTPRequestHandler):
             pass
         
         metrics['logs'] = [l for l in logs if l.strip()]
+        
+        # Deployment status (read from JSON files)
+        deployments = {}
+        try:
+            import json
+            from pathlib import Path
+            
+            # Check both production and staging deployment status
+            for env in ['production', 'staging']:
+                # Try multiple possible paths
+                possible_paths = [
+                    Path(f'/home/ubuntu/{env}/ai-ia-backend/.deployments/last_{env}.json'),
+                    Path(f'/home/ubuntu/main/ai-ia-backend/.deployments/last_{env}.json') if env == 'production' else Path(f'/home/ubuntu/staging/ai-ia-backend/.deployments/last_{env}.json'),
+                ]
+                
+                for status_file in possible_paths:
+                    if status_file.exists():
+                        try:
+                            with open(status_file, 'r') as f:
+                                deployments[env] = json.load(f)
+                            break
+                        except:
+                            pass
+                
+                if env not in deployments:
+                    deployments[env] = {
+                        'status': 'unknown',
+                        'timestamp': None,
+                        'message': 'No deployment recorded'
+                    }
+        except Exception as e:
+            deployments = {'error': str(e)}
+        
+        metrics['deployments'] = deployments
         
         return metrics
     

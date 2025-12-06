@@ -66,6 +66,17 @@ if docker ps | grep -q aiia_nginx; then
     LOGS+=($(docker logs aiia_nginx --tail 20 2>&1 | tail -20 | jq -R . 2>/dev/null || docker logs aiia_nginx --tail 20 2>&1 | tail -20 | sed 's/"/\\"/g' | sed 's/^/"/' | sed 's/$/"/'))
 fi
 
+# Deployment status
+DEPLOYMENTS_JSON="{}"
+if [ -f "/home/ubuntu/main/ai-ia-backend/.deployments/last_production.json" ]; then
+    PROD_DEPLOY=$(cat /home/ubuntu/main/ai-ia-backend/.deployments/last_production.json 2>/dev/null || echo '{}')
+    DEPLOYMENTS_JSON=$(echo "$DEPLOYMENTS_JSON" | jq ". + {\"production\": $PROD_DEPLOY}" 2>/dev/null || echo "$DEPLOYMENTS_JSON")
+fi
+if [ -f "/home/ubuntu/staging/ai-ia-backend/.deployments/last_staging.json" ]; then
+    STAGING_DEPLOY=$(cat /home/ubuntu/staging/ai-ia-backend/.deployments/last_staging.json 2>/dev/null || echo '{}')
+    DEPLOYMENTS_JSON=$(echo "$DEPLOYMENTS_JSON" | jq ". + {\"staging\": $STAGING_DEPLOY}" 2>/dev/null || echo "$DEPLOYMENTS_JSON")
+fi
+
 # Build JSON response
 cat <<EOF
 {
@@ -82,7 +93,8 @@ cat <<EOF
   "redis_status": "${REDIS_STATUS}",
   "redis_memory": "${REDIS_MEMORY}",
   "services": [$(IFS=','; echo "${SERVICES[*]}")],
-  "logs": [$(IFS=','; echo "${LOGS[*]}")]
+  "logs": [$(IFS=','; echo "${LOGS[*]}")],
+  "deployments": ${DEPLOYMENTS_JSON}
 }
 EOF
 
