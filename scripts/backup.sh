@@ -8,7 +8,8 @@ set -euo pipefail
 ENVIRONMENT="${1:-production}"
 BACKUP_ROOT="backups"
 BACKUP_DIR="$BACKUP_ROOT/backup_${ENVIRONMENT}_$(date +%Y%m%d_%H%M%S)"
-KEEP_BACKUPS=3
+# Keep only the latest encrypted backup due to storage constraints
+KEEP_BACKUPS=1
 
 # Color output
 RED='\033[0;31m'
@@ -83,15 +84,34 @@ EOF
 
 log "Backup created: $BACKUP_DIR"
 
-# Cleanup old backups (keep only KEEP_BACKUPS)
-log "Cleaning up old backups..."
-BACKUP_COUNT=$(ls -d "$BACKUP_ROOT"/backup_${ENVIRONMENT}_* 2>/dev/null | wc -l)
+# Create a compressed tarball of the backup directory
+TAR_FILE="${BACKUP_DIR}.tar.gz"
+log "Creating archive $TAR_FILE"
+tar -C "$(dirname "$BACKUP_DIR")" -czf "$TAR_FILE" "$(basename "$BACKUP_DIR")" || error "Failed to create tar archive"
 
-if [ "$BACKUP_COUNT" -gt "$KEEP_BACKUPS" ]; then
-    TO_DELETE=$((BACKUP_COUNT - KEEP_BACKUPS))
-    ls -d "$BACKUP_ROOT"/backup_${ENVIRONMENT}_* | sort -r | tail -n "$TO_DELETE" | xargs -r rm -rf
-    log "Deleted $TO_DELETE old backups"
+# Encrypt the tarball using GPG symmetric encryption (AES256)
+if ! command -v gpg > /dev/null 2>&1; then
+    error "gpg is required for encryption but not installed. Install gpg and retry."
+fi
+
+if [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+    error "BACKUP_PASSPHRASE is not set. Export BACKUP_PASSPHRASE before running this script to encrypt backups."
+fi
+
+ENC_FILE="${TAR_FILE}.gpg"
+log "Encrypting backup to $ENC_FILE"
+gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" -o "$ENC_FILE" "$TAR_FILE" || error "Encryption failed"
+
+# Remove unencrypted artifacts to save space
+rm -rf "$BACKUP_DIR" "$TAR_FILE"
+
+# Cleanup old encrypted backups (keep only $KEEP_BACKUPS)
+log "Cleaning up old encrypted backups (keeping $KEEP_BACKUPS)..."
+OLD_BACKUPS=$(ls -1t "$BACKUP_ROOT"/backup_${ENVIRONMENT}_*.tar.gz.gpg 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) || true)
+if [ -n "$OLD_BACKUPS" ]; then
+    echo "$OLD_BACKUPS" | xargs -r rm -f
+    log "Deleted old encrypted backups" 
 fi
 
 log "${GREEN}✓ Backup completed successfully${NC}"
-log "Total backups kept: $(ls -d "$BACKUP_ROOT"/backup_${ENVIRONMENT}_* 2>/dev/null | wc -l)"
+log "Total encrypted backups kept: $(ls -1 "$BACKUP_ROOT"/backup_${ENVIRONMENT}_*.tar.gz.gpg 2>/dev/null | wc -l)"

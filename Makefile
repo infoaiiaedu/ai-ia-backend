@@ -42,6 +42,12 @@ dev-bash: ## Open bash in Django container
 prod-deploy: ## Deploy to production (requires SSH access)
 	@bash scripts/deploy.sh production
 
+prod-deploy-zero-downtime: ## Deploy to production with zero downtime
+	@bash scripts/deploy-zero-downtime.sh production
+
+prod-rollback: ## Rollback production to previous version
+	@bash scripts/rollback.sh production previous
+
 prod-logs: ## View production Django logs
 	docker logs aiia_django_prod -f
 
@@ -55,6 +61,12 @@ prod-bash: ## Open bash in production Django container
 
 staging-deploy: ## Deploy to staging (requires SSH access)
 	@bash scripts/deploy.sh staging
+
+staging-deploy-zero-downtime: ## Deploy to staging with zero downtime
+	@bash scripts/deploy-zero-downtime.sh staging
+
+staging-rollback: ## Rollback staging to previous version
+	@bash scripts/rollback.sh staging previous
 
 staging-logs: ## View staging Django logs
 	docker logs aiia_django_staging -f
@@ -171,8 +183,21 @@ setup: ## Initial setup (copy env files and create volumes)
 		cp config/dev.env.example config/dev.env; \
 		echo "$(GREEN)✓ Created config/dev.env$(RESET)"; \
 	fi
-	@mkdir -p logs backups storage_prod storage_staging
+	@mkdir -p logs backups storage_prod storage_staging .deployments
 	@echo "$(GREEN)✓ Setup completed$(RESET)"
+
+setup-cron: ## Setup automated cron jobs (backups, SSL renewal, etc.)
+	@bash scripts/setup-cron.sh
+
+ssl-renew: ## Renew SSL certificates manually
+	@bash scripts/ssl-renew.sh
+
+security-harden: ## Run security hardening script (requires sudo)
+	@echo "$(YELLOW)Note: This requires sudo privileges$(RESET)"
+	@sudo bash scripts/security-hardening.sh
+
+backup-test: ## Test backup integrity (monthly)
+	@bash scripts/backup-test.sh production
 
 clean: ## Clean up containers and volumes (WARNING: removes data!)
 	@echo "$(RED)WARNING: This will remove all containers and volumes!$(RESET)"

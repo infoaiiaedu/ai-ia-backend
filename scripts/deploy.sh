@@ -30,8 +30,23 @@ warn() {
 
 # Create log directory
 mkdir -p logs
+mkdir -p .deployments
+
+# Store current version for rollback
+CURRENT_VERSION_FILE=".deployments/current_${ENVIRONMENT}.version"
+PREVIOUS_VERSION_FILE=".deployments/previous_${ENVIRONMENT}.version"
+
+# Save current version if it exists
+if [ -f "$CURRENT_VERSION_FILE" ]; then
+    cp "$CURRENT_VERSION_FILE" "$PREVIOUS_VERSION_FILE" 2>/dev/null || true
+fi
+
+# Get current git commit hash
+CURRENT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+echo "$CURRENT_COMMIT" > "$CURRENT_VERSION_FILE"
 
 log "Starting $ENVIRONMENT deployment..."
+log "Current version: $CURRENT_COMMIT"
 
 # 1. Pre-deployment validation
 log "Step 1: Validating environment..."
@@ -136,13 +151,35 @@ else
     HEALTH_URL="http://localhost:$PORT/health/"
 fi
 
+HEALTH_CHECK_PASSED=false
 for i in {1..30}; do
     if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
         log "Health check passed"
+        HEALTH_CHECK_PASSED=true
         break
     fi
     if [ $i -eq 30 ]; then
-        error "Health check failed after 30 attempts"
+        warn "Health check failed after 30 attempts - initiating rollback..."
+        # Rollback to previous version
+        if [ -f "$PREVIOUS_VERSION_FILE" ]; then
+            PREVIOUS_COMMIT=$(cat "$PREVIOUS_VERSION_FILE")
+            log "Rolling back to previous version: $PREVIOUS_COMMIT"
+            git checkout "$PREVIOUS_COMMIT" >> "$LOG_FILE" 2>&1 || warn "Git checkout failed, manual rollback required"
+            
+            # Restart with previous code
+            if [ "$ENVIRONMENT" = "production" ]; then
+                docker-compose up -d django_prod >> "$LOG_FILE" 2>&1 || true
+            else
+                docker-compose up -d django_staging >> "$LOG_FILE" 2>&1 || true
+            fi
+            
+            # Restore previous version file
+            cp "$PREVIOUS_VERSION_FILE" "$CURRENT_VERSION_FILE" 2>/dev/null || true
+            
+            error "Deployment failed and rolled back to previous version"
+        else
+            error "Health check failed and no previous version available for rollback"
+        fi
     fi
     warn "Health check attempt $i/30, waiting..."
     sleep 2

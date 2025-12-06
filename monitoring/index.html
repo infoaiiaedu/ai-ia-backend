@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-IA System Status Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0f1419;
+            color: #e6e6e6;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #2d3748;
+        }
+        
+        h1 {
+            color: #4a9eff;
+            margin-bottom: 10px;
+        }
+        
+        .last-update {
+            color: #888;
+            font-size: 0.9em;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: #1a1f2e;
+            border: 1px solid #2d3748;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        
+        .card h2 {
+            color: #4a9eff;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            border-bottom: 1px solid #2d3748;
+            padding-bottom: 10px;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #2d3748;
+        }
+        
+        .metric:last-child {
+            border-bottom: none;
+        }
+        
+        .metric-label {
+            color: #a0aec0;
+        }
+        
+        .metric-value {
+            font-weight: 600;
+            color: #e6e6e6;
+        }
+        
+        .status-ok {
+            color: #48bb78;
+        }
+        
+        .status-warning {
+            color: #ed8936;
+        }
+        
+        .status-error {
+            color: #f56565;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #2d3748;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #48bb78, #38a169);
+            transition: width 0.3s ease;
+        }
+        
+        .progress-fill.warning {
+            background: linear-gradient(90deg, #ed8936, #dd6b20);
+        }
+        
+        .progress-fill.error {
+            background: linear-gradient(90deg, #f56565, #e53e3e);
+        }
+        
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .service-item {
+            background: #1a1f2e;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .service-name {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #4a9eff;
+        }
+        
+        .service-status {
+            font-size: 0.9em;
+        }
+        
+        .logs-container {
+            background: #0a0e14;
+            border: 1px solid #2d3748;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+        }
+        
+        .log-line {
+            padding: 4px 0;
+            border-bottom: 1px solid #1a1f2e;
+        }
+        
+        .log-line.error {
+            color: #f56565;
+        }
+        
+        .log-line.warning {
+            color: #ed8936;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #888;
+            padding: 20px;
+        }
+        
+        .refresh-btn {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 10px 5px;
+        }
+        
+        .refresh-btn:hover {
+            background: #3182ce;
+        }
+        
+        .auto-refresh {
+            display: inline-block;
+            margin-left: 10px;
+            color: #888;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 AI-IA System Status Dashboard</h1>
+            <div class="last-update" id="lastUpdate">Loading...</div>
+            <button class="refresh-btn" onclick="loadMetrics()">🔄 Refresh</button>
+            <span class="auto-refresh">Auto-refresh: <span id="refreshCountdown">30</span>s</span>
+        </header>
+        
+        <div class="grid">
+            <div class="card">
+                <h2>📊 System Resources</h2>
+                <div id="systemMetrics" class="loading">Loading metrics...</div>
+            </div>
+            
+            <div class="card">
+                <h2>🗄️ Database</h2>
+                <div id="databaseMetrics" class="loading">Loading metrics...</div>
+            </div>
+            
+            <div class="card">
+                <h2>💾 Cache (Redis)</h2>
+                <div id="cacheMetrics" class="loading">Loading metrics...</div>
+            </div>
+        </div>
+        
+        <div class="card" style="margin-bottom: 20px;">
+            <h2>🔧 Service Status</h2>
+            <div class="services-grid" id="servicesGrid">
+                <div class="loading">Loading services...</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>📝 Recent Logs (Last 50 lines)</h2>
+            <div class="logs-container" id="logsContainer">
+                <div class="loading">Loading logs...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let refreshInterval;
+        let countdownInterval;
+        let countdown = 30;
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+        
+        function formatPercent(value, max) {
+            const percent = (value / max * 100).toFixed(1);
+            return `${percent}%`;
+        }
+        
+        function getStatusClass(value, warning, error) {
+            if (value >= error) return 'error';
+            if (value >= warning) return 'warning';
+            return 'ok';
+        }
+        
+        function createProgressBar(value, max, label) {
+            const percent = (value / max * 100);
+            const statusClass = getStatusClass(percent, 80, 95);
+            return `
+                <div class="metric">
+                    <span class="metric-label">${label}</span>
+                    <span class="metric-value ${statusClass}">${formatPercent(value, max)}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill ${statusClass}" style="width: ${Math.min(percent, 100)}%"></div>
+                </div>
+            `;
+        }
+        
+        async function loadMetrics() {
+            try {
+                // Fetch metrics from API endpoint
+                const response = await fetch('/api/metrics');
+                const data = await response.json();
+                
+                // Update timestamp
+                document.getElementById('lastUpdate').textContent = 
+                    `Last updated: ${new Date().toLocaleString()}`;
+                
+                // System Metrics
+                const systemHtml = `
+                    ${createProgressBar(data.cpu_usage || 0, 100, 'CPU Usage')}
+                    ${createProgressBar(data.memory_used || 0, data.memory_total || 512, 'Memory Usage')}
+                    ${createProgressBar(data.disk_used || 0, data.disk_total || 20, 'Disk Usage')}
+                    <div class="metric">
+                        <span class="metric-label">Load Average</span>
+                        <span class="metric-value">${data.load_avg || 'N/A'}</span>
+                    </div>
+                `;
+                document.getElementById('systemMetrics').innerHTML = systemHtml;
+                
+                // Database Metrics
+                const dbHtml = `
+                    <div class="metric">
+                        <span class="metric-label">PostgreSQL</span>
+                        <span class="metric-value status-${data.db_status === 'ok' ? 'ok' : 'error'}">${data.db_status || 'unknown'}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Production DB Size</span>
+                        <span class="metric-value">${data.db_prod_size || 'N/A'}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Staging DB Size</span>
+                        <span class="metric-value">${data.db_staging_size || 'N/A'}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">PgBouncer</span>
+                        <span class="metric-value status-${data.pgbouncer_status === 'ok' ? 'ok' : 'error'}">${data.pgbouncer_status || 'unknown'}</span>
+                    </div>
+                `;
+                document.getElementById('databaseMetrics').innerHTML = dbHtml;
+                
+                // Cache Metrics
+                const cacheHtml = `
+                    <div class="metric">
+                        <span class="metric-label">Redis Status</span>
+                        <span class="metric-value status-${data.redis_status === 'ok' ? 'ok' : 'error'}">${data.redis_status || 'unknown'}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Memory Used</span>
+                        <span class="metric-value">${data.redis_memory || 'N/A'}</span>
+                    </div>
+                `;
+                document.getElementById('cacheMetrics').innerHTML = cacheHtml;
+                
+                // Services
+                const services = data.services || [];
+                const servicesHtml = services.map(service => `
+                    <div class="service-item">
+                        <div class="service-name">${service.name}</div>
+                        <div class="service-status status-${service.status === 'ok' ? 'ok' : 'error'}">
+                            ${service.status === 'ok' ? '✓ Running' : '✗ Stopped'}
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('servicesGrid').innerHTML = servicesHtml;
+                
+                // Logs
+                const logs = data.logs || [];
+                const logsHtml = logs.map(log => {
+                    const className = log.includes('ERROR') || log.includes('error') ? 'error' : 
+                                    log.includes('WARNING') || log.includes('warning') ? 'warning' : '';
+                    return `<div class="log-line ${className}">${escapeHtml(log)}</div>`;
+                }).join('');
+                document.getElementById('logsContainer').innerHTML = logsHtml || '<div class="loading">No logs available</div>';
+                
+            } catch (error) {
+                console.error('Error loading metrics:', error);
+                document.getElementById('systemMetrics').innerHTML = 
+                    '<div class="status-error">Error loading metrics. Check API endpoint.</div>';
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function startAutoRefresh() {
+            countdown = 30;
+            refreshInterval = setInterval(loadMetrics, 30000); // 30 seconds
+            countdownInterval = setInterval(() => {
+                countdown--;
+                document.getElementById('refreshCountdown').textContent = countdown;
+                if (countdown <= 0) countdown = 30;
+            }, 1000);
+        }
+        
+        // Initial load
+        loadMetrics();
+        startAutoRefresh();
+    </script>
+</body>
+</html>
+
