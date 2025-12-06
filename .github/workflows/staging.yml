@@ -181,7 +181,7 @@ jobs:
             git checkout origin/staging
             
             echo "Cleaning up Docker resources..."
-            docker-compose down 2>/dev/null || true
+            docker-compose -f docker-compose.staging.yml down 2>/dev/null || true
             
             # Remove all networks that might conflict
             docker network rm ai-ia-backend_aiia_network 2>/dev/null || true
@@ -208,20 +208,20 @@ jobs:
             set -x
 
             echo "Backing up database (if running)..."
-            if [ "$(docker ps -q -f name=aiia_postgresql)" != "" ]; then
+            if [ "$(docker ps -q -f name=aiia_staging_postgresql)" != "" ]; then
               mkdir -p backups/db_staging_$(date +%Y%m%d_%H%M%S)
-              docker exec aiia_postgresql pg_dump -U aiia -d aiia_staging -F custom > backups/db_staging_$(date +%Y%m%d_%H%M%S)/database.dump || true
+              docker exec aiia_staging_postgresql pg_dump -U aiia -d aiia_staging -F custom > backups/db_staging_$(date +%Y%m%d_%H%M%S)/database.dump || true
             else
-              echo "aiia_postgresql container not present — skipping DB backup"
+              echo "aiia_staging_postgresql container not present — skipping DB backup"
             fi
             
             echo "Building and starting staging services..."
-            docker-compose build django_staging
-            docker-compose up -d --remove-orphans
+            docker-compose -f docker-compose.staging.yml build django_staging
+            docker-compose -f docker-compose.staging.yml up -d --remove-orphans
             
             echo "Waiting for PostgreSQL to be healthy..."
             for i in {1..90}; do
-              if docker-compose ps aiia_postgresql | grep -q 'healthy'; then
+              if docker-compose -f docker-compose.staging.yml ps aiia_staging_postgresql | grep -q 'healthy'; then
                 echo "✓ PostgreSQL is healthy"
                 break
               fi
@@ -235,13 +235,13 @@ jobs:
             echo "Waiting a bit more for all services to stabilize..."
             sleep 10
             
-            docker-compose exec -T django_staging python manage.py migrate --noinput || true
+            docker-compose -f docker-compose.staging.yml exec -T django_staging python manage.py migrate --noinput || true
             
             echo "Collecting static files..."
-            docker-compose exec -T django_staging python manage.py collectstatic --noinput --clear || true
+            docker-compose -f docker-compose.staging.yml exec -T django_staging python manage.py collectstatic --noinput --clear || true
             
             echo "Restarting nginx..."
-            docker-compose up -d nginx
+            docker-compose -f docker-compose.staging.yml up -d nginx
             
             echo "Health checks..."
             for i in {1..30}; do
@@ -290,12 +290,12 @@ jobs:
             docker ps -a || true
             echo "== docker-compose ps =="
             docker-compose ps || true
-            echo "== aiia_pgbouncer health =="
-            docker inspect --format '{{json .State.Health}}' aiia_pgbouncer || true
-            echo "== aiia_pgbouncer logs (tail 500) =="
-            docker logs --tail 500 aiia_pgbouncer || true
-            echo "== aiia_postgresql logs (tail 500) =="
-            docker logs --tail 500 aiia_postgresql || true
+            echo "== aiia_staging_pgbouncer health =="
+            docker inspect --format '{{json .State.Health}}' aiia_staging_pgbouncer || true
+            echo "== aiia_staging_pgbouncer logs (tail 500) =="
+            docker logs --tail 500 aiia_staging_pgbouncer || true
+            echo "== aiia_staging_postgresql logs (tail 500) =="
+            docker logs --tail 500 aiia_staging_postgresql || true
             echo "== End diagnostics =="
 
       - name: Notify Slack on Failure

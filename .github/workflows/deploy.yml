@@ -186,7 +186,7 @@ jobs:
             git checkout origin/main
             
             echo "Cleaning up Docker resources..."
-            docker-compose down 2>/dev/null || true
+            docker-compose -f docker-compose.prod.yml down 2>/dev/null || true
             
             # Remove all networks that might conflict
             docker network rm ai-ia-backend_aiia_network 2>/dev/null || true
@@ -212,20 +212,20 @@ EOF
             set -x
 
             echo "Backing up database (if running)..."
-            if [ "$(docker ps -q -f name=aiia_postgresql)" != "" ]; then
+            if [ "$(docker ps -q -f name=aiia_prod_postgresql)" != "" ]; then
               mkdir -p backups/db_prod_$(date +%Y%m%d_%H%M%S)
-              docker exec aiia_postgresql pg_dump -U aiia -d aiia_prod -F custom > backups/db_prod_$(date +%Y%m%d_%H%M%S)/database.dump || true
+              docker exec aiia_prod_postgresql pg_dump -U aiia -d aiia_prod -F custom > backups/db_prod_$(date +%Y%m%d_%H%M%S)/database.dump || true
             else
-              echo "aiia_postgresql container not present — skipping DB backup"
+              echo "aiia_prod_postgresql container not present — skipping DB backup"
             fi
             
             echo "Building and starting production services..."
-            docker-compose build django_prod
-            docker-compose up -d --remove-orphans
+            docker-compose -f docker-compose.prod.yml build django_prod
+            docker-compose -f docker-compose.prod.yml up -d --remove-orphans
             
             echo "Waiting for PostgreSQL to be healthy..."
             for i in {1..90}; do
-              if docker-compose ps aiia_postgresql | grep -q 'healthy'; then
+              if docker-compose -f docker-compose.prod.yml ps aiia_prod_postgresql | grep -q 'healthy'; then
                 echo "✓ PostgreSQL is healthy"
                 break
               fi
@@ -239,13 +239,13 @@ EOF
             echo "Waiting a bit more for all services to stabilize..."
             sleep 10
             
-            docker-compose exec -T django_prod python manage.py migrate --noinput || true
+            docker-compose -f docker-compose.prod.yml exec -T django_prod python manage.py migrate --noinput || true
             
             echo "Collecting static files..."
-            docker-compose exec -T django_prod python manage.py collectstatic --noinput --clear || true
+            docker-compose -f docker-compose.prod.yml exec -T django_prod python manage.py collectstatic --noinput --clear || true
             
             echo "Restarting nginx..."
-            docker-compose up -d nginx
+            docker-compose -f docker-compose.prod.yml up -d nginx
             
             echo "Health checks..."
             for i in {1..30}; do

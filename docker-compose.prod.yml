@@ -1,0 +1,217 @@
+# Production Environment Only
+# Deployed to /home/ubuntu/main/ai-ia-backend
+# Serves: eduaiia.com, www.eduaiia.com
+version: '3.9'
+
+services:
+  # ==================== SHARED SERVICES ====================
+  
+  postgresql:
+    image: postgres:16-alpine
+    container_name: aiia_prod_postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_MULTIPLE_DATABASES: "aiia_prod"
+      POSTGRES_USER: aiia
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeMe123!}
+      POSTGRES_INITDB_ARGS: "-c max_connections=50 -c shared_buffers=128MB -c effective_cache_size=256MB -c maintenance_work_mem=32MB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=10 -c work_mem=2621kB"
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    networks:
+      - aiia_prod_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiia -d aiia_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 200M
+        reservations:
+          cpus: '0.5'
+          memory: 150M
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: aiia_prod_pgbouncer
+    restart: unless-stopped
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    volumes:
+      - ./docker/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./docker/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    networks:
+      - aiia_prod_network
+    ports:
+      - "6432:6432"
+    healthcheck:
+      test: ["CMD", "psql", "-U", "aiia", "-h", "localhost", "-p", "6432", "-c", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 30M
+        reservations:
+          cpus: '0.1'
+          memory: 20M
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: aiia_prod_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 50mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - aiia_prod_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 50M
+        reservations:
+          cpus: '0.2'
+          memory: 40M
+
+  # ==================== PRODUCTION ENVIRONMENT ====================
+
+  django_prod:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prod
+      cache_from:
+        - django_prod:latest
+    image: django_prod:latest
+    container_name: aiia_prod_django
+    restart: unless-stopped
+    command: >
+      /bin/sh -c "
+      python manage.py migrate --noinput &&
+      python manage.py collectstatic --noinput --clear &&
+      gunicorn main.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers 2
+        --threads 2
+        --worker-class gthread
+        --worker-tmp-dir /dev/shm
+        --max-requests 1000
+        --max-requests-jitter 100
+        --timeout 30
+        --access-logfile -
+        --error-logfile -
+      "
+    environment:
+      DJANGO_SETTINGS_MODULE: main.settings
+      DJANGO_SECRET_KEY: ${SECRET_KEY}
+      DB_ENGINE: postgresql
+      DB_HOST: pgbouncer
+      DB_PORT: 6432
+      DB_NAME: aiia_prod
+      DB_USER: aiia
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_URI: ${REDIS_URI:-redis://redis:6379/0}
+      DJANGO_ALLOWED_HOSTS: ${ALLOWED_HOSTS:-eduaiia.com,www.eduaiia.com}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://eduaiia.com,https://www.eduaiia.com}
+      DJANGO_DEBUG: "false"
+      ENVIRONMENT: production
+      SECURE_SSL_REDIRECT: "true"
+    volumes:
+      - ./code:/app/code
+      - storage_prod:/app/storage
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - aiia_prod_network
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 150M
+        reservations:
+          cpus: '0.5'
+          memory: 120M
+
+  # ==================== REVERSE PROXY ====================
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: aiia_prod_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/prod.conf:/etc/nginx/conf.d/prod.conf:ro
+      - ./docker/nginx/monitoring.conf:/etc/nginx/conf.d/monitoring.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - storage_prod:/app/storage_prod:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      django_prod:
+        condition: service_healthy
+    networks:
+      - aiia_prod_network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 50M
+        reservations:
+          cpus: '0.2'
+          memory: 40M
+
+volumes:
+  pgdata_prod:
+    driver: local
+  redis_data_prod:
+    driver: local
+  storage_prod:
+    driver: local
+
+networks:
+  aiia_prod_network:
+    driver: bridge
+    name: aiia_prod_network
+
