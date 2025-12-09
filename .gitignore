@@ -20,6 +20,7 @@ __pycache__
 .idea/
 storage/
 tmp/
+node_modules/
 
 env/
 
