@@ -59,7 +59,7 @@ case $choice in
         ;;
     2)
         echo "🐳 Starting backend services only..."
-        docker-compose -f docker-compose.backend-only.yml up -d
+        docker-compose -f deployment/docker/docker-compose.backend-only.yml up -d
         echo ""
         echo "✅ Deployment complete!"
         echo "🌐 Your Django app should be available at:"
@@ -78,7 +78,7 @@ echo "📊 Checking container status..."
 if [ $choice -eq 1 ]; then
     docker-compose ps
 else
-    docker-compose -f docker-compose.backend-only.yml ps
+    docker-compose -f deployment/docker/docker-compose.backend-only.yml ps
 fi
 
 echo ""

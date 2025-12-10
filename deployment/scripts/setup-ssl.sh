@@ -57,7 +57,7 @@ sudo chmod -R 755 ./storage/certbot
 echo "🌐 Starting temporary nginx for certificate verification..."
 
 # Start nginx temporarily for domain verification
-docker-compose -f docker-compose.subdomain.yml up -d nginx
+docker-compose -f deployment/docker/docker-compose.subdomain.yml up -d nginx
 
 # Wait for nginx to be ready
 echo "⏳ Waiting for nginx to start..."
@@ -109,9 +109,9 @@ fi
 echo "🔧 Enabling HTTPS in nginx configuration..."
 
 # Enable HTTPS blocks in subdomain.conf
-sed -i 's/^# server {$/server {/' docker/nginx/subdomain.conf
-sed -i 's/^#     listen 443/    listen 443/' docker/nginx/subdomain.conf
-sed -i 's/^#     /    /' docker/nginx/subdomain.conf
+sed -i 's/^# server {$/server {/' deployment/configs/subdomain.conf
+sed -i 's/^#     listen 443/    listen 443/' deployment/configs/subdomain.conf
+sed -i 's/^#     /    /' deployment/configs/subdomain.conf
 
 # Update Django configuration for HTTPS
 echo "🔧 Updating Django configuration for HTTPS..."
@@ -120,8 +120,8 @@ sed -i 's|CSRF_TRUSTED_ORIGINS = .*|CSRF_TRUSTED_ORIGINS = ["https://api.eduaiia
 
 # Restart services to apply SSL configuration
 echo "🔄 Restarting services with SSL configuration..."
-docker-compose -f docker-compose.subdomain.yml down
-docker-compose -f docker-compose.subdomain.yml up -d
+docker-compose -f deployment/docker/docker-compose.subdomain.yml down
+docker-compose -f deployment/docker/docker-compose.subdomain.yml up -d
 
 # Wait for services to restart
 echo "⏳ Waiting for services to restart..."

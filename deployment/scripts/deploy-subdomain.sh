@@ -59,7 +59,7 @@ if [[ ! $confirm =~ ^[Yy]$ ]]; then
 fi
 
 echo "🐳 Starting Django backend services..."
-docker-compose -f docker-compose.subdomain.yml up -d
+docker-compose -f deployment/docker/docker-compose.subdomain.yml up -d
 
 echo ""
 echo "⏳ Waiting for services to start..."
@@ -67,7 +67,7 @@ sleep 10
 
 echo ""
 echo "📊 Checking container status..."
-docker-compose -f docker-compose.subdomain.yml ps
+docker-compose -f deployment/docker/docker-compose.subdomain.yml ps
 
 echo ""
 echo "🔍 Health checks..."
@@ -124,8 +124,8 @@ echo "       }"
 echo "   }"
 echo ""
 echo "📝 Useful commands:"
-echo "  - View logs: docker-compose -f docker-compose.subdomain.yml logs -f app"
-echo "  - Stop: docker-compose -f docker-compose.subdomain.yml down"
-echo "  - Restart: docker-compose -f docker-compose.subdomain.yml restart"
+echo "  - View logs: docker-compose -f deployment/docker/docker-compose.subdomain.yml logs -f app"
+echo "  - Stop: docker-compose -f deployment/docker/docker-compose.subdomain.yml down"
+echo "  - Restart: docker-compose -f deployment/docker/docker-compose.subdomain.yml restart"
 echo ""
 echo "🎉 Django subdomain deployment completed!"
