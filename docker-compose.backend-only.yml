@@ -1,0 +1,82 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: main:1.0
+    container_name: main_app
+    restart: always
+    command: >
+      /bin/sh -c "
+      echo 'Waiting for Postgres...' &&
+      until pg_isready -h psql -U postgres; do
+        sleep 2
+      done &&
+      echo 'Postgres is ready!' &&
+      python manage.py migrate --noinput &&
+      python manage.py collectstatic --noinput &&
+      exec gunicorn main.wsgi:application --bind 0.0.0.0:5000 --workers 2 --threads 2 --log-level info
+      "
+    ports:
+      - "5000:5000"  # Expose Django directly
+    volumes:
+      - ./code:/app/code
+      - ./storage:/app/storage
+      - ./config:/app/config:ro
+    depends_on:
+      psql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai_network
+    environment:
+      - PYTHONPATH=/app/code
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: ai_redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - ai_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  psql:
+    image: postgres:16-alpine
+    container_name: ai_psql
+    restart: always
+    environment:
+      POSTGRES_DB: ai_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./storage/db/pgdata:/var/lib/postgresql/data
+    networks:
+      - ai_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  redis-data:
+
+networks:
+  ai_network:
+    driver: bridge
