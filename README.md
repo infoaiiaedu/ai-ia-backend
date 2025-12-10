@@ -22,8 +22,22 @@ cp deployment/examples/.env.example .env
 ### 2. Run Locally (Development)
 
 **Option A: Docker (Recommended)**
+
+*For Development (includes Django dev server):*
 ```bash
-# Start all services (Django + PostgreSQL + Redis)
+# Start development environment (Django + PostgreSQL + Redis)
+docker-compose -f deployment/docker/docker-compose.dev.yml up -d
+
+# View logs
+docker-compose -f deployment/docker/docker-compose.dev.yml logs -f app
+
+# Stop services
+docker-compose -f deployment/docker/docker-compose.dev.yml down
+```
+
+*For Production-like Environment:*
+```bash
+# Start all services with Gunicorn and Nginx
 docker-compose -f deployment/docker/docker-compose.subdomain.yml up -d
 
 # View logs
