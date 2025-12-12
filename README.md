@@ -1,28 +1,58 @@
 # AI-IA Backend
 
-Django REST API backend for the AI-IA educational platform.
+Info for DevOps Engineer
 
-## 🚀 Run Locally (Development)
+Overview
+- Django + Gunicorn, Postgres, Redis. Containerized via Docker Compose.
+- Compose variants in deployment/docker/ for different setups (dev, subdomain, backend-only).
+- Host Nginx typically proxies api/admin subdomains to the backend nginx service.
 
-### Quick Setup
+Prerequisites
+- Docker and Docker Compose installed
+- Configure environment (DB creds, secrets, allowed hosts)
+
+Run with Docker Compose (production-like, subdomain proxy)
 ```bash
-git clone https://github.com/infoaiiaedu/ai-ia-backend.git
-cd ai-ia-backend
+# from repo root
+cd deployment/docker
+# exposes backend nginx on host 8080/8443 by default
+docker compose -f docker-compose.subdomain.yml up -d
+
+# view logs
+docker compose -f docker-compose.subdomain.yml logs -f
+
+# health check nginx inside stack
+curl -i http://127.0.0.1:8080/
 ```
 
-### Option 1: Docker (Recommended)
-```bash
-# Start development environment
-docker-compose -f deployment/docker/docker-compose.dev.yml up -d
-
-# View logs
-docker-compose -f deployment/docker/docker-compose.dev.yml logs -f app
-
-# Stop when done
-docker-compose -f deployment/docker/docker-compose.dev.yml down
+Host Nginx example (api/admin)
+```
+upstream aiia_backend {
+    server 127.0.0.1:8080;
+    keepalive 32;
+}
+server {
+    listen 80;
+    server_name api.your-domain.com;
+    location / { proxy_pass http://aiia_backend; }
+}
+server {
+    listen 80;
+    server_name admin.your-domain.com;
+    location / { proxy_pass http://aiia_backend; }
+}
 ```
 
-### Option 2: Local Python
+Run locally (development compose)
+```bash
+# from repo root
+cd deployment/docker
+# maps Django directly to 5000 for faster iteration
+docker compose -f docker-compose.dev.yml up -d
+# app: http://127.0.0.1:5000/
+```
+
+Run without Docker (local Python)
 ```bash
 cd code
 pip install -r requirements.txt
@@ -31,34 +61,25 @@ python manage.py createsuperuser
 python manage.py runserver 0.0.0.0:5000
 ```
 
-## 🌐 Access Points
+Access Points
+- API Base: http://localhost:5000/api/
+- Admin Panel: http://localhost:5000/admin/
+- API Docs (if enabled): http://localhost:5000/api/docs/
 
-- **API Documentation**: http://localhost:5000/api/docs/
-- **Admin Panel**: http://localhost:5000/admin/
-- **API Base**: http://localhost:5000/api/
-
-## 🔧 Development
-
+Development commands
 ```bash
-# Make changes in code/ directory
-# Create migrations
+# In code/
 python manage.py makemigrations
-
-# Apply migrations  
 python manage.py migrate
-
-# Run tests
 python manage.py test
 ```
 
-## 📁 Key Directories
+Key directories
+- code/ — Django project and apps
+- deployment/docker/ — compose files and nginx configs
+- storage/ — static/media/certbot data persisted via volumes
 
-- `code/` - Django application
-- `code/apps/` - Django apps (core, user, payments)
-- `code/api/` - API endpoints
-- `deployment/` - Docker and deployment configs
-
-## 🌐 Production URLs
-
-- **API**: https://api.eduaiia.com/api/docs/
-- **Admin**: https://admin.eduaiia.com/admin/
+Production notes
+- Migrations and collectstatic run on container start (see compose command).
+- Ensure ALLOWED_HOSTS, database credentials, and secure settings are configured for production.
+- For HTTPS, terminate TLS at host Nginx or mount certificates into the nginx service.
