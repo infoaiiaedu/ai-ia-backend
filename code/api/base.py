@@ -7,8 +7,8 @@ api = NinjaAPI(
     docs_url="docs/",
     csrf=False,
     servers=[
-        {"url": "https://api.eduaiia.com/api", "description": "Production Server"},
-        {"url": "http://localhost:8080/api", "description": "Local Development Server"},
+        {"url": "https://api.eduaiia.com", "description": "Production Server"},
+        {"url": "http://localhost:8080", "description": "Local Development Server"},
     ]
 )
 
