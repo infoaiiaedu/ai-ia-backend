@@ -33,3 +33,6 @@ wheels/
 **/migrations/*.pyc
 !**/migrations/__init__.py
 *.log
+# Exclude node_modules from all locations
+**/node_modules/
+code/apps/widgets/node_modules/
