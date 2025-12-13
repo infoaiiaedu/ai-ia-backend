@@ -25,7 +25,8 @@ jobs:
             cd /home/ubuntu/ai-ia-backend
             git fetch --all
             git reset --hard origin/${{ github.ref_name }}
-            docker compose -f deployment/docker/docker-compose.subdomain.yml down || true
+            docker rm -f django_psql django_redis django_backend django_nginx || true
+            docker compose -f deployment/docker/docker-compose.subdomain.yml down --remove-orphans || true
             docker compose -f deployment/docker/docker-compose.subdomain.yml up -d --build
             sleep 5
             curl -fsS http://127.0.0.1:8080/ -o /dev/null
