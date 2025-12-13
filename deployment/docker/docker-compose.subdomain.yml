@@ -1,9 +1,6 @@
 services:
   app:
-    build:
-      context: ../../
-      dockerfile: Dockerfile
-    image: main:1.0
+    image: ghcr.io/infoaiiaedu/ai-ia-backend:${IMAGE_TAG:-latest}
     container_name: django_backend
     restart: always
     command: >
