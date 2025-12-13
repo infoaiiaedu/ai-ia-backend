@@ -1,38 +1,51 @@
 #!/bin/bash
 
-# Django Docker Status Check Script
+# Django Backend Status Checker
+# Checks the status of all Django backend services
 
-echo "🐳 Docker Container Status"
-echo "=========================="
+echo "📊 Django Backend Status Check"
+echo "=============================="
+echo ""
 
-# Check if docker-compose.yml services are running
-if docker-compose ps | grep -q "main_app"; then
-    echo "📊 Full Stack Status:"
-    docker-compose ps
+# Change to deployment directory
+cd "$(dirname "$0")/../docker" || exit 1
+
+# Check if running
+if docker-compose -f docker-compose.subdomain.yml ps | grep -q "django" 2>/dev/null; then
+    echo "✅ Backend services are running"
     echo ""
-    echo "📝 Recent App Logs:"
-    docker-compose logs --tail=10 app
-elif docker-compose -f docker-compose.backend-only.yml ps | grep -q "main_app" 2>/dev/null; then
-    echo "📊 Backend Only Status:"
-    docker-compose -f docker-compose.backend-only.yml ps
+    echo "📦 Container Status:"
+    docker-compose -f docker-compose.subdomain.yml ps
     echo ""
-    echo "📝 Recent App Logs:"
-    docker-compose -f docker-compose.backend-only.yml logs --tail=10 app
+    
+    # Check Django backend health
+    echo "🔍 Health Checks:"
+    if curl -s http://localhost:8080/ > /dev/null 2>&1; then
+        echo "✅ Backend nginx responding on port 8080"
+    else
+        echo "❌ Backend nginx not responding on port 8080"
+    fi
+    
+    if docker exec django_backend curl -s http://localhost:5000/ > /dev/null 2>&1; then
+        echo "✅ Django app responding internally"
+    else
+        echo "❌ Django app not responding"
+    fi
+    
+    echo ""
+    echo "📝 Recent Logs (last 10 lines):"
+    docker-compose -f docker-compose.subdomain.yml logs --tail=10 app
+    
 else
-    echo "❌ No Django containers found running"
-    echo "💡 Run './deploy.sh' to start the application"
+    echo "❌ Backend services are not running"
+    echo ""
+    echo "To start services, run:"
+    echo "  cd deployment/docker"
+    echo "  docker-compose -f docker-compose.subdomain.yml up -d"
 fi
 
 echo ""
-echo "🔍 Health Check:"
-if curl -s http://localhost:5000/ > /dev/null 2>&1; then
-    echo "✅ Django app is responding on port 5000"
-else
-    echo "❌ Django app is not responding on port 5000"
-fi
-
-if curl -s http://localhost/ > /dev/null 2>&1; then
-    echo "✅ Nginx is responding on port 80"
-else
-    echo "ℹ️  No response on port 80 (normal if using backend-only mode)"
-fi
+echo "💡 Useful commands:"
+echo "  View logs: docker-compose -f deployment/docker/docker-compose.subdomain.yml logs -f app"
+echo "  Restart: docker-compose -f deployment/docker/docker-compose.subdomain.yml restart"
+echo "  Stop: docker-compose -f deployment/docker/docker-compose.subdomain.yml down"
