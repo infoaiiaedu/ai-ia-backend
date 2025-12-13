@@ -14,6 +14,14 @@ services:
       python manage.py collectstatic --noinput &&
       exec gunicorn main.wsgi:application --bind 0.0.0.0:5000 --workers 2 --threads 2 --log-level info
       "
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
     volumes:
       - ../../storage:/app/storage
       - ../../config:/app/config:ro
@@ -42,6 +50,14 @@ services:
       - redis-data:/data
     networks:
       - backend_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -61,6 +77,14 @@ services:
       - ../../storage/db/pgdata:/var/lib/postgresql/data
     networks:
       - backend_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d ai_db"]
       interval: 10s
@@ -86,6 +110,14 @@ services:
         condition: service_healthy
     networks:
       - backend_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "80"]
       interval: 30s
