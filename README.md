@@ -83,3 +83,5 @@ Production notes
 - Migrations and collectstatic run on container start (see compose command).
 - Ensure ALLOWED_HOSTS, database credentials, and secure settings are configured for production.
 - For HTTPS, terminate TLS at host Nginx or mount certificates into the nginx service.
+
+<!-- Test GHCR auto-deployment for backend Sat Dec 13 16:24:04 UTC 2025 -->
