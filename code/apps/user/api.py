@@ -1,12 +1,9 @@
 from ninja import Router, Form
 from ninja.errors import HttpError
 from ninja.security import HttpBearer
-from django.core.exceptions import ValidationError
-from django.utils import timezone
 from apps.user.models import Parent, Child
 from .schema import TokenSchema, ChildRegisterSchema, OTPResponseSchema
 from .utils import decode_jwt_token
-import random
 
 router = Router()
 
@@ -23,7 +20,7 @@ class AuthBearer(HttpBearer):
 
 
 # ---------------------------
-# Parent Registration (sends OTP)
+# Parent Registration (sends OTP via Twilio)
 # ---------------------------
 @router.post("/parent/register/", response=OTPResponseSchema)
 def parent_register(
@@ -31,14 +28,16 @@ def parent_register(
     name: str = Form(...),
     mobile_phone: str = Form(...),
 ):
-    # Check if parent already exists
     if Parent.objects.filter(mobile_phone=mobile_phone).exists():
         raise HttpError(400, "Parent with this mobile phone already exists")
 
-    # Create parent
     parent = Parent.objects.create(name=name, mobile_phone=mobile_phone)
-    parent.generate_otp()        # generate OTP
-    parent.send_otp_sms()        # send OTP via Textbelt
+
+    parent.generate_otp()               # Generate OTP
+    result = parent.send_otp_sms()      # Send via Twilio
+
+    if not result.get("success"):
+        raise HttpError(500, f"Failed to send SMS: {result.get('error')}")
 
     return {"message": "Parent created. Check your mobile for OTP."}
 
@@ -77,14 +76,11 @@ def parent_verify_otp(
 def child_register(request, data: ChildRegisterSchema):
     parent: Parent = request.auth
 
-    # Create child
     child = Child.objects.create(
         parent=parent,
         name=data.name,
         grade=data.grade
     )
-
-    # Generate permanent access code
     access_code = child.generate_access_code()
 
     return {

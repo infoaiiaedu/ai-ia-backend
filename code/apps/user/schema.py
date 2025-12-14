@@ -21,4 +21,3 @@ class ChildLoginSchema(Schema):
 
 class OTPResponseSchema(Schema):
     message: str
-    otp_code: str = None 

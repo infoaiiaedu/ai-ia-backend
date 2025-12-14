@@ -6,13 +6,16 @@ from django.db import models
 from django.utils import timezone
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
-import requests
+from twilio.rest import Client
 
 # ---------------------------
-# Textbelt API configuration
+# Twilio configuration
 # ---------------------------
-TEXTBELT_API_KEY = "8d23cd12853a8fd96975cfb53c079e0c8382006cNnPSkVmmeXusbIVdEZTQw0uF5"
-TEXTBELT_API_URL = "https://textbelt.com/text"
+TWILIO_ACCOUNT_SID = "ACf1749d275eaab4b9ead992b2a058edfb"
+TWILIO_AUTH_TOKEN = "718b274bebf4966cfe8d13d3a1e4d6b1"
+TWILIO_PHONE_NUMBER = "+13167105763"  # Your Twilio virtual number
+
+twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # ---------------------------
 # User Model
@@ -20,7 +23,6 @@ TEXTBELT_API_URL = "https://textbelt.com/text"
 class User(AbstractUser):
     def __str__(self):
         return self.username
-
 
 # ---------------------------
 # Parent Model
@@ -75,17 +77,19 @@ class Parent(models.Model):
         self.save(update_fields=["otp_code", "otp_expiry"])
         return code
 
-    def send_otp_sms(self) -> dict:
+    def send_otp_sms(self):
         if not self.otp_code or self.otp_expiry < timezone.now():
             self.generate_otp()
 
-        payload = {
-            "phone": self.mobile_phone,
-            "message": f"Your OTP is {self.otp_code}",
-            "key": TEXTBELT_API_KEY,
-        }
-        response = requests.post(TEXTBELT_API_URL, data=payload)
-        return response.json()
+        try:
+            message = twilio_client.messages.create(
+                body=f"Your OTP is {self.otp_code}",
+                from_=TWILIO_PHONE_NUMBER,
+                to=self.mobile_phone
+            )
+            return {"success": True, "sid": message.sid}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def verify_otp(self, code: str) -> bool:
         if self.otp_code == code and self.otp_expiry and self.otp_expiry >= timezone.now():
