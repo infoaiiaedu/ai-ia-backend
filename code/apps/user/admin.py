@@ -22,4 +22,3 @@ class ChildAdmin(admin.ModelAdmin):
     autocomplete_fields = ('parent',)
     list_filter = ('grade',)
     search_fields = ('name', 'parent__name')
-    readonly_fields = ['otp_code', 'otp_expiry']
