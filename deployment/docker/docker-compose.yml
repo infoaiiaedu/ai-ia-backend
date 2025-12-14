@@ -23,6 +23,7 @@ services:
           cpus: '0.5'
           memory: 256M
     volumes:
+      - ../../code:/app/code
       - ../../storage:/app/storage
       - ../../config:/app/config:ro
     depends_on:
