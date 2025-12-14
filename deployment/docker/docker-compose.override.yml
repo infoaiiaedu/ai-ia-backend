@@ -1,0 +1,13 @@
+# This file is automatically used by docker compose for local development
+# It overrides docker-compose.yml to build locally instead of pulling from GHCR
+# 
+# GitHub Actions ignores this file and uses only docker-compose.yml (pulls from GHCR)
+# 
+# To use: Just run `docker compose build` or `docker compose up --build` from this directory
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: ghcr.io/infoaiiaedu/ai-ia-backend:local
