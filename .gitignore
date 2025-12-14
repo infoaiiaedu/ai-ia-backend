@@ -12,7 +12,7 @@ __pycache__
 .vite
 
 *.local
-*.toml
+
 !*.example.toml
 
 
@@ -22,9 +22,7 @@ storage/
 tmp/
 node_modules/
 
-env/
 
-config/*
 
 dist/
 wheels/

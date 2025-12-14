@@ -1,0 +1,25 @@
+# AI-IA Backend Configuration
+# This file configures the Django application for production deployment
+
+[project]
+SECRET_KEY = "django-insecure-change-this-in-production"
+DEBUG = false
+ALLOWED_HOSTS = ["*"]  # Allow all hosts for development. In production, specify exact domains.
+CSRF_TRUSTED_ORIGINS = ["http://localhost", "http://127.0.0.1", "http://localhost:8080", "http://127.0.0.1:8080", "http://admin.eduaiia.com", "http://api.eduaiia.com", "https://admin.eduaiia.com", "https://api.eduaiia.com"]
+REDIS_URI = "redis://redis:6379/0"
+
+[database]
+ENGINE = "postgresql"
+NAME = "ai_db"
+USER = "postgres"
+PASSWORD = "postgres"
+HOST = "psql"
+PORT = "5432"
+
+[server]
+IP = "0.0.0.0"
+User = "app"
+Pass = "app"
+PROJECT_DIR = "/app"
+Root_User = "root"
+Root_Pass = "root"
