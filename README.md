@@ -61,6 +61,39 @@ docker exec django_backend python manage.py collectstatic --noinput
 docker exec -it django_backend python manage.py shell
 ```
 
+### PostgreSQL Database Access
+
+#### Run SQL Commands Directly
+```bash
+# Check PostgreSQL version
+docker exec django_psql psql -U postgres -d ai_db -c "SELECT version();"
+
+# List all tables
+docker exec django_psql psql -U postgres -d ai_db -c "\dt"
+
+# Query users
+docker exec django_psql psql -U postgres -d ai_db -c "SELECT * FROM user_user;"
+
+# Count migrations
+docker exec django_psql psql -U postgres -d ai_db -c "SELECT COUNT(*) FROM django_migrations;"
+```
+
+#### Interactive PostgreSQL Shell
+```bash
+# For Windows (use cmd.exe)
+cmd /c "docker exec -it django_psql psql -U postgres -d ai_db"
+
+# For Linux/Mac
+docker exec -it django_psql psql -U postgres -d ai_db
+```
+
+Once inside PostgreSQL shell:
+- `\dt` - List all tables
+- `\d table_name` - Describe table structure
+- `\l` - List all databases
+- `SELECT * FROM auth_user;` - Query data
+- `\q` - Exit
+
 ---
 
 ## Configuration
