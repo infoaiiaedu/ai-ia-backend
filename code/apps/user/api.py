@@ -1,9 +1,10 @@
 from ninja import Router, Form
 from ninja.errors import HttpError
 from ninja.security import HttpBearer
-from apps.user.models import Parent, Child
+from apps.user.models import Parent, Child, Logo
 from .schema import TokenSchema, ChildRegisterSchema, OTPResponseSchema
 from .utils import decode_jwt_token
+from django.shortcuts import get_object_or_404
 
 router = Router()
 
@@ -69,29 +70,29 @@ def parent_verify_otp(
     raise HttpError(400, "Invalid or expired OTP")
 
 
-# ---------------------------
-# Child Registration (by Parent)
-# ---------------------------
 @router.post("/child/register/", response=OTPResponseSchema, auth=AuthBearer())
 def child_register(request, data: ChildRegisterSchema):
     parent: Parent = request.auth
 
+    logo = None
+    if data.logo_id:
+        logo = get_object_or_404(Logo, id=data.logo_id)
+
     child = Child.objects.create(
         parent=parent,
         name=data.name,
-        grade=data.grade
+        grade=data.grade,
+        nickname=data.nickname,
+        logo=logo,
     )
+
     access_code = child.generate_access_code()
 
     return {
         "message": f"Child {child.name} registered.",
-        "access_code": access_code
+        "access_code": access_code,
     }
 
-
-# ---------------------------
-# Child Login (with permanent access_code)
-# ---------------------------
 @router.post("/child/login/", response=TokenSchema)
 def child_login(request, access_code: str = Form(...)):
     try:

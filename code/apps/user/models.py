@@ -106,29 +106,43 @@ class Parent(models.Model):
         verbose_name = "მშობელი"
         verbose_name_plural = "მშობლები"
 
+class Logo(models.Model):
+    name = models.CharField(max_length=100, verbose_name="ლოგოს სახელი")
+    image = models.ImageField(upload_to='logos/', verbose_name="ლოგოს სურათი")
+
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        verbose_name = "ლოგო"
+        verbose_name_plural = "ლოგოები"
 
 # ---------------------------
 # Child Model
 # ---------------------------
 class Child(models.Model):
+    GENDER_CHOICES = (
+        ('male', 'ბიჭი'),
+        ('female', 'გოგო'),
+    )
+
     parent = models.ForeignKey(Parent, on_delete=models.CASCADE, related_name='children', verbose_name="მშობელი")
     name = models.CharField(max_length=100, verbose_name="სახელი და გვარი")
     grade = models.PositiveIntegerField("კლასი")
+    nickname = models.CharField(max_length=100, null=True, blank=True, verbose_name="ნიქნეიმი")
+    logo = models.ForeignKey(Logo, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="ლოგო")
+    date_of_birth = models.DateField(null=True, blank=True, verbose_name="დაბადების თარიღი")
+    created = models.DateTimeField(default=timezone.now, verbose_name="შეიქმნა")
+    sex = models.CharField(choices=GENDER_CHOICES, null=True, blank=True, verbose_name="სქესი")
 
     access_code = models.CharField(max_length=10, unique=True, blank=True, null=True)
 
-    # ---------------------------
-    # Generate permanent random access code
-    # ---------------------------
     def generate_access_code(self):
         if not self.access_code:
             self.access_code = f"{random.randint(100000, 999999)}"
             self.save(update_fields=["access_code"])
         return self.access_code
 
-    # ---------------------------
-    # JWT Token Generation
-    # ---------------------------
     def generate_tokens(self) -> dict:
         access_payload = {
             "account_id": self.id,
