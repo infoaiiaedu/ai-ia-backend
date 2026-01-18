@@ -85,8 +85,40 @@ jobs:
             # Start with new image from GHCR
             docker compose -f deployment/docker/docker-compose.yml up -d
             
+            # Wait for database to be ready
+            echo "⏳ Waiting for database to be ready..."
+            sleep 10
+            
+            # Check for unapplied model changes and create migrations if needed
+            echo "🔍 Checking for model changes..."
+            docker compose -f deployment/docker/docker-compose.yml exec -T app python manage.py makemigrations --dry-run --check || {
+              echo "⚠️ Detected unapplied model changes, generating migrations..."
+              docker compose -f deployment/docker/docker-compose.yml exec -T app python manage.py makemigrations --noinput || {
+                echo "❌ Failed to generate migrations!"
+                exit 1
+              }
+              echo "✅ Migrations generated successfully"
+            }
+            
+            # Run migrations explicitly and check for errors
+            echo "🔄 Running database migrations..."
+            docker compose -f deployment/docker/docker-compose.yml exec -T app python manage.py migrate --noinput || {
+              echo "❌ Migration failed!"
+              docker compose -f deployment/docker/docker-compose.yml logs --tail=100 app
+              exit 1
+            }
+            
+            echo "✅ Migrations completed successfully"
+            
+            # Collect static files
+            echo "📦 Collecting static files..."
+            docker compose -f deployment/docker/docker-compose.yml exec -T app python manage.py collectstatic --noinput || {
+              echo "⚠️ Collectstatic failed (non-critical)"
+            }
+            
             # Wait and health check
-            sleep 20
+            echo "🏥 Running health check..."
+            sleep 10
             curl -fsS http://127.0.0.1:8080/admin/ -o /dev/null || {
               echo "❌ Health check failed!"
               docker compose -f deployment/docker/docker-compose.yml logs --tail=50
