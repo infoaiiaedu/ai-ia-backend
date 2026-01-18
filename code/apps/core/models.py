@@ -56,16 +56,16 @@ class Quiz(models.Model):
     is_active = models.BooleanField(default=True, verbose_name="აქტიური")
     created_at = models.DateTimeField(default=timezone.now, verbose_name="შექმნის თარიღი")
 
-    def clean(self):
-        from django.core.exceptions import ValidationError
-        # For existing MCQ questions, ensure at least one answer exists
-        if self.question_type == self.MCQ:
-            if self.pk and self.answers.count() == 0:
-                raise ValidationError('Multiple choice questions require at least one answer.')
+    # def clean(self):
+    #     from django.core.exceptions import ValidationError
+    #     # For existing MCQ questions, ensure at least one answer exists
+    #     if self.question_type == self.MCQ:
+    #         if self.pk and self.answers.count() == 0:
+    #             raise ValidationError('Multiple choice questions require at least one answer.')
 
-        # Open questions should have a correct text answer
-        if self.question_type == self.OPEN and not self.correct_text_answer:
-            raise ValidationError('Open questions require a correct text answer.')
+    #     # Open questions should have a correct text answer
+    #     if self.question_type == self.OPEN and not self.correct_text_answer:
+    #         raise ValidationError('Open questions require a correct text answer.')
     updated_at = models.DateTimeField(auto_now=True, verbose_name="განახლების თარიღი")
 
     def __str__(self):
