@@ -3,42 +3,147 @@ from ninja import Router
 from typing import List
 from django.shortcuts import get_object_or_404
 
-from apps.user.utils import decode_jwt_token
-from ninja.security import HttpBearer
-from .models import Subject, Grade, Topic
+
+# Authentication temporarily commented out
+# from apps.user.utils import decode_jwt_token
+# from ninja.security import HttpBearer
+
+from .models import Subject, Grade, Topic, Quiz
 from .schema import (
     SubjectSchema,
     GradeSchema,
+    TopicSchema,
+    PublicQuizSchema,
+    PublicQuestionSchema,
+    PublicAnswerSchema,
+    QuizSchema,
+    QuestionSchema,
+    AnswerSchema,
 )
 
 router = Router()
 
-class AuthBearer(HttpBearer):
-    def authenticate(self, request, token):
-        account, state = decode_jwt_token(token)
 
-        if not state:
-            return None
-
-        return account
-
-@router.get("/subjects/", response=List[SubjectSchema], auth=AuthBearer())
+@router.get("/subjects/", response=List[SubjectSchema])
 def list_subjects(request):
     subjects = Subject.objects.filter(is_active=True)
-    
     return subjects
 
-@router.get("/subjects/{subject_id}/", response=SubjectSchema, auth=AuthBearer())
+
+@router.get("/subjects/{subject_id}/", response=SubjectSchema)
 def get_subject(request, subject_id: int):
     return get_object_or_404(Subject, id=subject_id)
 
-@router.delete("/subjects/{subject_id}/", response={"success": bool}, auth=AuthBearer())
-def delete_subject(request, subject_id: int):
-    subject = get_object_or_404(Subject, id=subject_id)
-    subject.delete()
-    return {"success": True}
 
-@router.get("/grades/", response=List[GradeSchema], auth=AuthBearer())
+@router.get("/grades/", response=List[GradeSchema])
 def list_grades(request):
     return Grade.objects.all()
+
+def _serialize_quiz(quiz: Quiz):
+    questions = []
+    for q in quiz.questions.all().order_by('order'):
+        answers = [
+            {
+                'id': a.id,
+                'text': a.text,
+                'is_correct': a.is_correct,
+                'order': a.order,
+            }
+            for a in q.answers.all().order_by('order')
+        ]
+        questions.append({
+            'id': q.id,
+            'text': q.text,
+            'question_type': q.question_type,
+            'order': q.order,
+            'xp': q.xp,
+            'correct_text_answer': q.correct_text_answer,
+            'explanation': q.explanation,
+            'answers': answers,
+        })
+
+    return {
+        'id': quiz.id,
+        'title': quiz.title,
+        'description': quiz.description,
+        'level': quiz.level,
+        'is_active': quiz.is_active,
+        'created_at': quiz.created_at,
+        'updated_at': quiz.updated_at,
+        'questions': questions,
+    }
+
+
+@router.get("/quizzes/", response=List[PublicQuizSchema])
+def list_quizzes(request):
+    qs = Quiz.objects.filter(is_active=True).prefetch_related('questions__answers').order_by('-created_at')
+    # serialize without exposing correct answers
+    result = []
+    for q in qs:
+        questions = []
+        for qq in q.questions.all().order_by('order'):
+            answers = [
+                {
+                    'id': a.id,
+                    'text': a.text,
+                    'order': a.order,
+                }
+                for a in qq.answers.all().order_by('order')
+            ]
+            questions.append({
+                'id': qq.id,
+                'text': qq.text,
+                'question_type': qq.question_type,
+                'order': qq.order,
+                'xp': qq.xp,
+                'explanation': qq.explanation,
+                'answers': answers,
+            })
+        result.append({
+            'id': q.id,
+            'title': q.title,
+            'description': q.description,
+            'level': q.level,
+            'is_active': q.is_active,
+            'created_at': q.created_at,
+            'updated_at': q.updated_at,
+            'questions': questions,
+        })
+    return result
+
+
+@router.get("/quizzes/{quiz_id}/", response=PublicQuizSchema)
+def get_quiz(request, quiz_id: int):
+    quiz = get_object_or_404(Quiz.objects.prefetch_related('questions__answers'), id=quiz_id)
+    questions = []
+    for q in quiz.questions.all().order_by('order'):
+        answers = [
+            {
+                'id': a.id,
+                'text': a.text,
+                'order': a.order,
+            }
+            for a in q.answers.all().order_by('order')
+        ]
+        questions.append({
+            'id': q.id,
+            'text': q.text,
+            'question_type': q.question_type,
+            'order': q.order,
+            'xp': q.xp,
+            'explanation': q.explanation,
+            'answers': answers,
+        })
+
+    return {
+        'id': quiz.id,
+        'title': quiz.title,
+        'description': quiz.description,
+        'level': quiz.level,
+        'is_active': quiz.is_active,
+        'created_at': quiz.created_at,
+        'updated_at': quiz.updated_at,
+        'questions': questions,
+    }
+
 
