@@ -25,5 +25,5 @@ class SubjectForm(forms.ModelForm):
         model = Subject
         fields = "__all__"
         widgets = {
-            "image": ImageWidget(),
+            "icon": ImageWidget(),
         }
