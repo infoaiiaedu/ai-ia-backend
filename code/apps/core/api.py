@@ -40,20 +40,18 @@ def list_grades(request):
     return Grade.objects.all()
 
 
-@router.get("/topics/", response={200: List[TopicSchema], 201: TopicSchema})
-def topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] = None):
-    """List all topics or get a specific topic by ID, optionally filtered by grade"""
-    topics_qs = Topic.objects.select_related('grade').prefetch_related('subjects')
+@router.get("/topics/", response=List[TopicSchema])
+def get_topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] = None):
+    """Get topics with optional filtering by topic_id or grade_id"""
+    topics = Topic.objects.select_related('grade').order_by('-created_at')
     
-    # If topic_id is provided, return single topic
     if topic_id is not None:
-        return 201, get_object_or_404(topics_qs, id=topic_id)
+        topics = topics.filter(id=topic_id)
     
-    # Otherwise, return list (optionally filtered by grade)
     if grade_id is not None:
-        topics_qs = topics_qs.filter(grade_id=grade_id)
+        topics = topics.filter(grade_id=grade_id)
     
-    return 200, topics_qs
+    return topics
 
 def _serialize_quiz(quiz: Quiz):
     questions = []
