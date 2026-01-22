@@ -43,15 +43,15 @@ def list_grades(request):
 @router.get("/topics/", response=List[TopicSchema])
 def get_topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] = None):
     """Get topics with optional filtering by topic_id or grade_id"""
-    topics = Topic.objects.select_related('grade').order_by('-created_at')
+    topics = Topic.objects.select_related('grade')
     
     if topic_id is not None:
         topics = topics.filter(id=topic_id)
     
     if grade_id is not None:
-        topics = topics.filter(grade_id=grade_id)
+        topics = topics.filter(id=grade_id)
     
-    return topics
+    return list(topics.order_by('-created_at'))
 
 def _serialize_quiz(quiz: Quiz):
     questions = []
