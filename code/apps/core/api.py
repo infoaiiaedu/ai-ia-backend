@@ -39,6 +39,19 @@ def get_subject(request, subject_id: int):
 def list_grades(request):
     return Grade.objects.all()
 
+
+@router.get("/topics/", response={200: List[TopicSchema], 201: TopicSchema})
+def topics(request, topic_id: int = None, grade_id: int = None):
+    topics_qs = Topic.objects.select_related('grade').prefetch_related('subjects')
+    
+    if topic_id:
+        return 201, get_object_or_404(topics_qs, id=topic_id)
+
+    if grade_id:
+        topics_qs = topics_qs.filter(grade_id=grade_id)
+    
+    return 200, topics_qs
+
 def _serialize_quiz(quiz: Quiz):
     questions = []
     for q in quiz.questions.all().order_by('order'):
