@@ -12,14 +12,6 @@ class Subject(models.Model):
     topic = models.ManyToManyField('Topic', related_name='subjects', blank=True, verbose_name="თემები")
     is_active = models.BooleanField(default=True, verbose_name="აქტიური")
 
-    @property
-    def topics_count(self):
-        return self.topic.count()
-    
-    @property
-    def quizzes_count(self):
-        return self.quizzes.count()
-
     def __str__(self):
         return self.name
     
@@ -29,10 +21,6 @@ class Subject(models.Model):
     
 class Grade(models.Model):
     level = models.CharField(max_length=50, verbose_name="კლასი")
-
-    @property
-    def quizzes_count(self):
-        return self.quizzes.count()
 
     def __str__(self):
         return self.level
