@@ -61,7 +61,7 @@ def get_topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] 
         topics = topics.filter(id=topic_id)
     
     if grade_id is not None:
-        topics = topics.filter(grade_id=grade_id)
+        topics = topics.filter(grade__id=grade_id)
     
     return list(topics.order_by('-created_at'))
 

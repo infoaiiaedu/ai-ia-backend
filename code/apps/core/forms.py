@@ -7,7 +7,7 @@ from apps.core.widgets import SelectTwoWidget, SelectMultipleTwoWidget
 
 from .choices import PageChoices, PostionChoices, COLOR_CHOICES
 
-from .models import Topic
+from .models import Topic, Subject
 
 
 class TopicForm(forms.ModelForm):
@@ -18,4 +18,12 @@ class TopicForm(forms.ModelForm):
             "description": TinymceWidget(name="default"),
             "image": ImageWidget(),
             "video": VideoWidget(),
+        }
+        
+class SubjectForm(forms.ModelForm):
+    class Meta:
+        model = Subject
+        fields = "__all__"
+        widgets = {
+            "image": ImageWidget(),
         }

@@ -5,7 +5,7 @@ from django.forms.models import BaseInlineFormSet
 from django.core.exceptions import ValidationError
 import logging
 
-from .forms import TopicForm
+from .forms import TopicForm, SubjectForm
 from .models import Subject, Grade, Topic, Quiz, Question, Answer
 
 
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
+    form = SubjectForm
     list_display = ('name',)
     search_fields = ('name',)
     ordering = ('name',)
