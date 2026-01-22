@@ -1,6 +1,6 @@
 # apps/core/router.py
 from ninja import Router
-from typing import List
+from typing import List, Optional
 from django.shortcuts import get_object_or_404
 
 
@@ -41,13 +41,16 @@ def list_grades(request):
 
 
 @router.get("/topics/", response={200: List[TopicSchema], 201: TopicSchema})
-def topics(request, topic_id: int = None, grade_id: int = None):
+def topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] = None):
+    """List all topics or get a specific topic by ID, optionally filtered by grade"""
     topics_qs = Topic.objects.select_related('grade').prefetch_related('subjects')
     
-    if topic_id:
+    # If topic_id is provided, return single topic
+    if topic_id is not None:
         return 201, get_object_or_404(topics_qs, id=topic_id)
-
-    if grade_id:
+    
+    # Otherwise, return list (optionally filtered by grade)
+    if grade_id is not None:
         topics_qs = topics_qs.filter(grade_id=grade_id)
     
     return 200, topics_qs

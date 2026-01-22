@@ -16,11 +16,12 @@ class GradeSchema(Schema):
 class TopicSchema(Schema):
     id: int
     name: str
-    subject: SubjectSchema
     grade: Optional[GradeSchema] = None
     image: Optional[dict] = None
     video: Optional[dict] = None
     description: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class AnswerSchema(Schema):
