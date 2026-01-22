@@ -7,14 +7,14 @@ class SubjectSchema(Schema):
     id: int
     name: str
     icon: Optional[dict] = None
-    topics_count: int
-    quizzes_count: int
+    topics_count: int = 0
+    quizzes_count: int = 0
 
 
 class GradeSchema(Schema):
     id: int
     level: str
-    quizzes_count: int
+    quizzes_count: int = 0
 
 
 class TopicSchema(Schema):
