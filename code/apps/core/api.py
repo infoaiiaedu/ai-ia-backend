@@ -2,6 +2,7 @@
 from ninja import Router
 from typing import List, Optional
 from django.shortcuts import get_object_or_404
+from django.db.models import Count
 
 
 # Authentication temporarily commented out
@@ -26,18 +27,29 @@ router = Router()
 
 @router.get("/subjects/", response=List[SubjectSchema])
 def list_subjects(request):
-    subjects = Subject.objects.filter(is_active=True)
+    subjects = Subject.objects.filter(is_active=True).annotate(
+        topics_count=Count('topic', distinct=True),
+        quizzes_count=Count('quizzes', distinct=True)
+    )
     return subjects
 
 
 @router.get("/subjects/{subject_id}/", response=SubjectSchema)
 def get_subject(request, subject_id: int):
-    return get_object_or_404(Subject, id=subject_id)
+    return get_object_or_404(
+        Subject.objects.annotate(
+            topics_count=Count('topic', distinct=True),
+            quizzes_count=Count('quizzes', distinct=True)
+        ),
+        id=subject_id
+    )
 
 
 @router.get("/grades/", response=List[GradeSchema])
 def list_grades(request):
-    return Grade.objects.all()
+    return Grade.objects.annotate(
+        quizzes_count=Count('quizzes', distinct=True)
+    )
 
 
 @router.get("/topics/", response=List[TopicSchema])
@@ -49,7 +61,7 @@ def get_topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] 
         topics = topics.filter(id=topic_id)
     
     if grade_id is not None:
-        topics = topics.filter(id=grade_id)
+        topics = topics.filter(grade_id=grade_id)
     
     return list(topics.order_by('-created_at'))
 

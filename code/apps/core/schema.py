@@ -6,11 +6,15 @@ from datetime import datetime
 class SubjectSchema(Schema):
     id: int
     name: str
+    icon: Optional[dict] = None
+    topics_count: int
+    quizzes_count: int
 
 
 class GradeSchema(Schema):
     id: int
     level: str
+    quizzes_count: int
 
 
 class TopicSchema(Schema):

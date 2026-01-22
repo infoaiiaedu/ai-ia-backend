@@ -5,8 +5,20 @@ class Subject(models.Model):
     name = models.CharField(max_length=100, verbose_name="საგნის სახელი")
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="ფასი")
     
+    icon = models.JSONField(
+        null=True, blank=True, editable=True, verbose_name="აიქონი"
+    )
+    
     topic = models.ManyToManyField('Topic', related_name='subjects', blank=True, verbose_name="თემები")
     is_active = models.BooleanField(default=True, verbose_name="აქტიური")
+
+    @property
+    def topics_count(self):
+        return self.topic.count()
+    
+    @property
+    def quizzes_count(self):
+        return self.quizzes.count()
 
     def __str__(self):
         return self.name
@@ -17,6 +29,10 @@ class Subject(models.Model):
     
 class Grade(models.Model):
     level = models.CharField(max_length=50, verbose_name="კლასი")
+
+    @property
+    def quizzes_count(self):
+        return self.quizzes.count()
 
     def __str__(self):
         return self.level
@@ -52,6 +68,30 @@ class Topic(models.Model):
 class Quiz(models.Model):
     title = models.CharField(max_length=255, verbose_name="ქვიზის სახელი")
     description = models.TextField(blank=True, null=True, verbose_name="აღწერა")
+    
+    subject = models.ForeignKey(
+        Subject, 
+        on_delete=models.CASCADE, 
+        related_name='quizzes', 
+        null=True, 
+        blank=True, 
+        verbose_name="საგანი"
+    )
+    topics = models.ManyToManyField(
+        Topic, 
+        related_name='quizzes', 
+        blank=True, 
+        verbose_name="თემები"
+    )
+    grade = models.ForeignKey(
+        Grade, 
+        on_delete=models.CASCADE, 
+        related_name='quizzes', 
+        null=True, 
+        blank=True, 
+        verbose_name="კლასი"
+    )
+    
     level = models.PositiveSmallIntegerField(verbose_name="დონე")
     is_active = models.BooleanField(default=True, verbose_name="აქტიური")
     created_at = models.DateTimeField(default=timezone.now, verbose_name="შექმნის თარიღი")
