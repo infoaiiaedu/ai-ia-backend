@@ -80,7 +80,8 @@ jobs:
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             
             # Stop and remove old containers
-            docker compose -f deployment/docker/docker-compose.yml down --remove-orphans || true
+            # DO NOT use --remove-orphans as it affects other projects (ai-engine, website)
+            docker compose -f deployment/docker/docker-compose.yml down || true
             
             # Start with new image from GHCR
             docker compose -f deployment/docker/docker-compose.yml up -d
