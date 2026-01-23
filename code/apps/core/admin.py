@@ -15,9 +15,10 @@ logger = logging.getLogger(__name__)
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
     form = SubjectForm
-    list_display = ('name',)
+    list_display = ('name', 'price', 'is_active')
     search_fields = ('name',)
     ordering = ('name',)
+    list_filter = ('is_active',)
 
 
 @admin.register(Grade)
@@ -30,10 +31,10 @@ class GradeAdmin(admin.ModelAdmin):
 @admin.register(Topic)
 class TopicAdmin(admin.ModelAdmin):
     form = TopicForm
-    list_display = ['name', 'grade']
-    search_fields = ['name', 'grade']
+    list_display = ['name', 'subject', 'grade']
+    search_fields = ['name']
     ordering = ['name']
-    autocomplete_fields = ['grade']
+    autocomplete_fields = ['subject', 'grade']
 
 
 class AnswerInlineFormSet(BaseInlineFormSet):
@@ -116,9 +117,11 @@ class QuestionInline(admin.StackedInline):
 
 @admin.register(Quiz)
 class QuizAdmin(admin.ModelAdmin):
-    list_display = ('title', 'level', 'created_at', 'updated_at')
+    list_display = ('title', 'subject', 'grade', 'level', 'created_at', 'updated_at')
     inlines = [QuestionInline]
     search_fields = ('title',)
+    list_filter = ('subject', 'grade', 'is_active')
+    autocomplete_fields = ['subject', 'grade', 'topics']
     ordering = ('-created_at',)
 
     class Media:

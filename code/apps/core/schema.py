@@ -20,6 +20,7 @@ class GradeSchema(Schema):
 class TopicSchema(Schema):
     id: int
     name: str
+    subject: Optional[SubjectSchema] = None
     grade: Optional[GradeSchema] = None
     image: Optional[dict] = None
     video: Optional[dict] = None

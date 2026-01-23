@@ -9,7 +9,6 @@ class Subject(models.Model):
         null=True, blank=True, editable=True, verbose_name="აიქონი"
     )
     
-    topic = models.ManyToManyField('Topic', related_name='subjects', blank=True, verbose_name="თემები")
     is_active = models.BooleanField(default=True, verbose_name="აქტიური")
 
     def __str__(self):
@@ -31,6 +30,7 @@ class Grade(models.Model):
         
 class Topic(models.Model):
     name = models.CharField(max_length=100, verbose_name="თემის სახელი")
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='topics', null=True, blank=True, verbose_name="საგანი")
     grade = models.ForeignKey(Grade, on_delete=models.CASCADE, related_name='topics', null=True, blank=True, verbose_name="კლასი")
     
     image = models.JSONField(
