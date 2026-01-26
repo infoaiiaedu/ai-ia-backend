@@ -98,6 +98,7 @@ class PublicQuizSchema(Schema):
         is_active: bool
         created_at: datetime
         updated_at: datetime
+    questions: List[PublicQuestionSchema] = []
 
 
 class AnswerSubmission(Schema):
