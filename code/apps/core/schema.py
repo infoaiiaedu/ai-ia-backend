@@ -91,13 +91,13 @@ class PublicQuestionSchema(Schema):
 
 
 class PublicQuizSchema(Schema):
-        id: int
-        title: str
-        description: Optional[str] = None
-        level: int
-        is_active: bool
-        created_at: datetime
-        updated_at: datetime
+    id: int
+    title: str
+    description: Optional[str] = None
+    level: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
     questions: List[PublicQuestionSchema] = []
 
 
