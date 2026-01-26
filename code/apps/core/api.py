@@ -9,7 +9,7 @@ from django.db.models import Count
 # from apps.user.utils import decode_jwt_token
 # from ninja.security import HttpBearer
 
-from .models import Subject, Grade, Topic, Quiz
+from .models import Subject, Grade, Topic, Quiz, Question, Answer
 from .schema import (
     SubjectSchema,
     GradeSchema,
@@ -20,6 +20,10 @@ from .schema import (
     QuizSchema,
     QuestionSchema,
     AnswerSchema,
+    AnswerSubmission,
+    QuizSubmission,
+    AnswerResult,
+    QuizSubmissionResult,
 )
 
 router = Router()
@@ -173,6 +177,48 @@ def get_quiz(request, quiz_id: int):
         'created_at': quiz.created_at,
         'updated_at': quiz.updated_at,
         'questions': questions,
+    }
+
+
+@router.post("/quizzes/submit/", response=QuizSubmissionResult)
+def submit_quiz(request, payload: QuizSubmission):
+    quiz = get_object_or_404(Quiz, id=payload.quiz_id)
+    results = []
+    total_xp = 0
+    correct_count = 0
+    
+    for submission in payload.answers:
+        question = get_object_or_404(Question, id=submission.question_id, quiz=quiz)
+        is_correct = False
+        xp = 0
+        
+        if question.question_type == Question.MCQ:
+            # For multiple choice - check answer_id
+            if submission.answer_id:
+                answer = get_object_or_404(Answer, id=submission.answer_id, question=question)
+                is_correct = answer.is_correct
+        else:
+            # For open question - check text match (case-insensitive)
+            if submission.text and question.correct_text_answer:
+                is_correct = submission.text.lower().strip() == question.correct_text_answer.lower().strip()
+        
+        if is_correct:
+            xp = question.xp
+            correct_count += 1
+            total_xp += xp
+        
+        results.append({
+            'question_id': question.id,
+            'is_correct': is_correct,
+            'explanation': question.explanation,
+            'xp': xp,
+        })
+    
+    return {
+        'total_xp': total_xp,
+        'correct_count': correct_count,
+        'total_count': len(payload.answers),
+        'answers': results,
     }
 
 

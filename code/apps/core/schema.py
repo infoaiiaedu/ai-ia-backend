@@ -98,5 +98,34 @@ class PublicQuizSchema(Schema):
         is_active: bool
         created_at: datetime
         updated_at: datetime
-        questions: List[PublicQuestionSchema] = []
+
+
+class AnswerSubmission(Schema):
+    """User's answer submission - can be answer_id or text"""
+    question_id: int
+    answer_id: Optional[int] = None  # For MCQ
+    text: Optional[str] = None  # For open questions
+
+
+class QuizSubmission(Schema):
+    """Submit multiple answers for a quiz"""
+    quiz_id: int
+    answers: List[AnswerSubmission]
+
+
+class AnswerResult(Schema):
+    """Result of a single answer validation"""
+    question_id: int
+    is_correct: bool
+    explanation: Optional[str] = None
+    xp: int = 0  # XP earned if correct
+
+
+class QuizSubmissionResult(Schema):
+    """Result of quiz submission"""
+    total_xp: int
+    correct_count: int
+    total_count: int
+    answers: List[AnswerResult]
+    questions: List[PublicQuestionSchema] = []
 
