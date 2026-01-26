@@ -145,41 +145,6 @@ def list_quizzes(request):
     return result
 
 
-@router.get("/quizzes/{quiz_id}/", response=PublicQuizSchema)
-def get_quiz(request, quiz_id: int):
-    quiz = get_object_or_404(Quiz.objects.prefetch_related('questions__answers'), id=quiz_id)
-    questions = []
-    for q in quiz.questions.all().order_by('order'):
-        answers = [
-            {
-                'id': a.id,
-                'text': a.text,
-                'order': a.order,
-            }
-            for a in q.answers.all().order_by('order')
-        ]
-        questions.append({
-            'id': q.id,
-            'text': q.text,
-            'question_type': q.question_type,
-            'order': q.order,
-            'xp': q.xp,
-            'explanation': q.explanation,
-            'answers': answers,
-        })
-
-    return {
-        'id': quiz.id,
-        'title': quiz.title,
-        'description': quiz.description,
-        'level': quiz.level,
-        'is_active': quiz.is_active,
-        'created_at': quiz.created_at,
-        'updated_at': quiz.updated_at,
-        'questions': questions,
-    }
-
-
 @router.post("/quizzes/submit/", response=QuizSubmissionResult)
 def submit_quiz(request, payload: QuizSubmission):
     quiz = get_object_or_404(Quiz, id=payload.quiz_id)
@@ -219,6 +184,41 @@ def submit_quiz(request, payload: QuizSubmission):
         'correct_count': correct_count,
         'total_count': len(payload.answers),
         'answers': results,
+    }
+
+
+@router.get("/quizzes/{quiz_id}/", response=PublicQuizSchema)
+def get_quiz(request, quiz_id: int):
+    quiz = get_object_or_404(Quiz.objects.prefetch_related('questions__answers'), id=quiz_id)
+    questions = []
+    for q in quiz.questions.all().order_by('order'):
+        answers = [
+            {
+                'id': a.id,
+                'text': a.text,
+                'order': a.order,
+            }
+            for a in q.answers.all().order_by('order')
+        ]
+        questions.append({
+            'id': q.id,
+            'text': q.text,
+            'question_type': q.question_type,
+            'order': q.order,
+            'xp': q.xp,
+            'explanation': q.explanation,
+            'answers': answers,
+        })
+
+    return {
+        'id': quiz.id,
+        'title': quiz.title,
+        'description': quiz.description,
+        'level': quiz.level,
+        'is_active': quiz.is_active,
+        'created_at': quiz.created_at,
+        'updated_at': quiz.updated_at,
+        'questions': questions,
     }
 
 
