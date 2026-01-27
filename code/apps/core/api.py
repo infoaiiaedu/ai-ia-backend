@@ -30,12 +30,15 @@ router = Router()
 
 
 @router.get("/subjects/", response=List[SubjectSchema])
-def list_subjects(request):
-    subjects = Subject.objects.filter(is_active=True).annotate(
+def list_subjects(request, grade_id: Optional[int] = None):
+    subjects = Subject.objects.filter(is_active=True)
+    if grade_id is not None:
+        subjects = subjects.filter(topics__grade_id=grade_id)
+    subjects = subjects.annotate(
         topics_count=Count('topics', distinct=True),
         quizzes_count=Count('quizzes', distinct=True)
     )
-    return subjects
+    return subjects.distinct()
 
 
 @router.get("/subjects/{subject_id}/", response=SubjectSchema)
