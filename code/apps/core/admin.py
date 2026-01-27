@@ -15,10 +15,11 @@ logger = logging.getLogger(__name__)
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
     form = SubjectForm
-    list_display = ('name', 'price', 'is_active')
+    list_display = ('name', 'grade', 'price', 'is_active')
     search_fields = ('name',)
     ordering = ('name',)
-    list_filter = ('is_active',)
+    list_filter = ('grade', 'is_active')
+    autocomplete_fields = ('grade',)
 
 
 @admin.register(Grade)
@@ -31,10 +32,10 @@ class GradeAdmin(admin.ModelAdmin):
 @admin.register(Topic)
 class TopicAdmin(admin.ModelAdmin):
     form = TopicForm
-    list_display = ['name', 'subject', 'grade']
+    list_display = ['name', 'subject']
     search_fields = ['name']
     ordering = ['name']
-    autocomplete_fields = ['subject', 'grade']
+    autocomplete_fields = ['subject']
 
 
 class AnswerInlineFormSet(BaseInlineFormSet):
