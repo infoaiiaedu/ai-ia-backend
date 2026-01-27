@@ -33,7 +33,7 @@ router = Router()
 def list_subjects(request, grade_id: Optional[int] = None):
     subjects = Subject.objects.filter(is_active=True)
     if grade_id is not None:
-        subjects = subjects.filter(topics__grade_id=grade_id)
+        subjects = subjects.filter(grade_id=grade_id)
     subjects = subjects.annotate(
         topics_count=Count('topics', distinct=True),
         quizzes_count=Count('quizzes', distinct=True)
@@ -62,13 +62,13 @@ def list_grades(request):
 @router.get("/topics/", response=List[TopicSchema])
 def get_topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] = None, subject_id: Optional[int] = None):
     """Get topics with optional filtering by topic_id, grade_id, or subject_id"""
-    topics = Topic.objects.select_related('grade', 'subject')
+    topics = Topic.objects.select_related('subject')
     
     if topic_id is not None:
         topics = topics.filter(id=topic_id)
     
     if grade_id is not None:
-        topics = topics.filter(grade_id=grade_id)
+        topics = topics.filter(subject__grade_id=grade_id)
     
     if subject_id is not None:
         topics = topics.filter(subject_id=subject_id)

@@ -2,18 +2,17 @@ from ninja import Schema
 from typing import List, Optional
 from datetime import datetime
 
+class GradeSchema(Schema):
+    id: int
+    level: str
+    quizzes_count: int = 0
 
 class SubjectSchema(Schema):
     id: int
     name: str
     icon: Optional[dict] = None
+    grade: Optional[GradeSchema] = None
     topics_count: int = 0
-    quizzes_count: int = 0
-
-
-class GradeSchema(Schema):
-    id: int
-    level: str
     quizzes_count: int = 0
 
 
@@ -21,7 +20,6 @@ class TopicSchema(Schema):
     id: int
     name: str
     subject: Optional[SubjectSchema] = None
-    grade: Optional[GradeSchema] = None
     image: Optional[dict] = None
     video: Optional[dict] = None
     description: Optional[str] = None
