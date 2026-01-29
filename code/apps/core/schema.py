@@ -64,6 +64,7 @@ class QuizSchema(Schema):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    topics: List[TopicSchema] = []
     questions: List[QuestionSchema] = []
 
 
@@ -96,6 +97,7 @@ class PublicQuizSchema(Schema):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    topics: List[TopicSchema] = []
     questions: List[PublicQuestionSchema] = []
 
 

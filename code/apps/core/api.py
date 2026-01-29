@@ -143,6 +143,7 @@ def list_quizzes(request):
             'is_active': q.is_active,
             'created_at': q.created_at,
             'updated_at': q.updated_at,
+            'topics': list(q.topics.all()),
             'questions': questions,
         })
     return result
@@ -221,6 +222,7 @@ def get_quiz(request, quiz_id: int):
         'is_active': quiz.is_active,
         'created_at': quiz.created_at,
         'updated_at': quiz.updated_at,
+        'topics': list(quiz.topics.all()),
         'questions': questions,
     }
 

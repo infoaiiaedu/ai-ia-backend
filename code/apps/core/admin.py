@@ -27,8 +27,7 @@ class GradeAdmin(admin.ModelAdmin):
     list_display = ('level',)
     search_fields = ('level',)
     ordering = ('level',)
-
-
+    
 @admin.register(Topic)
 class TopicAdmin(admin.ModelAdmin):
     form = TopicForm
