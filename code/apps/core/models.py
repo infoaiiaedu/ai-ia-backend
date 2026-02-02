@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator
 from django.utils import timezone
 
 class Subject(models.Model):
@@ -52,7 +53,11 @@ class Topic(models.Model):
     created_at = models.DateTimeField(default=timezone.now, verbose_name="შექმნის თარიღი")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="განახლების თარიღი")
     
-    order = models.PositiveSmallIntegerField(default=0, verbose_name="მიმდევრობა")
+    order = models.SmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name="მიმდევრობა",
+    )
     
     def __str__(self):
         return f"{self.name}"

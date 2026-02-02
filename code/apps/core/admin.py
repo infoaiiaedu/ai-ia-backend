@@ -37,11 +37,6 @@ class TopicAdmin(SortableAdminMixin, admin.ModelAdmin):
     autocomplete_fields = ['subject']
     sortable_field_name = 'order'
 
-    def save_model(self, request, obj, form, change):
-        if obj.order is not None and obj.order < 0:
-            obj.order = 0
-        super().save_model(request, obj, form, change)
-
 
 class AnswerInlineFormSet(BaseInlineFormSet):
     def __init__(self, *args, **kwargs):
