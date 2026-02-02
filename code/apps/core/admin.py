@@ -33,6 +33,7 @@ class TopicAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = TopicForm
     list_display = ['name', 'subject', 'order']
     search_fields = ['name']
+    list_filter = ('subject',)
     ordering = ['order']
     autocomplete_fields = ['subject']
     sortable_field_name = 'order'

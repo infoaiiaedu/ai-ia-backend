@@ -73,7 +73,7 @@ def get_topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] 
     if subject_id is not None:
         topics = topics.filter(subject_id=subject_id)
     
-    return list(topics.order_by('-created_at'))
+    return list(topics.order_by('order'))
 
 def _serialize_quiz(quiz: Quiz):
     questions = []
