@@ -52,12 +52,15 @@ class Topic(models.Model):
     created_at = models.DateTimeField(default=timezone.now, verbose_name="შექმნის თარიღი")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="განახლების თარიღი")
     
+    order = models.PositiveSmallIntegerField(default=0, verbose_name="მიმდევრობა")
+    
     def __str__(self):
         return f"{self.name}"
     
     class Meta:
         verbose_name = "თემა"
         verbose_name_plural = "თემები"
+        ordering = ['order']
 
 
 class Quiz(models.Model):

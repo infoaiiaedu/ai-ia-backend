@@ -29,12 +29,13 @@ class GradeAdmin(admin.ModelAdmin):
     ordering = ('level',)
     
 @admin.register(Topic)
-class TopicAdmin(admin.ModelAdmin):
+class TopicAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = TopicForm
-    list_display = ['name', 'subject']
+    list_display = ['name', 'subject', 'order']
     search_fields = ['name']
-    ordering = ['name']
+    ordering = ['order']
     autocomplete_fields = ['subject']
+    sortable_field_name = 'order'
 
 
 class AnswerInlineFormSet(BaseInlineFormSet):
@@ -131,7 +132,7 @@ class QuizAdmin(admin.ModelAdmin):
 @admin.register(Question)
 class QuestionAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = QuestionAdminForm
-    list_display = ['text_short', 'quiz', 'question_type', 'order', 'xp']
+    list_display = ['text_short', 'quiz', 'question_type', 'xp', 'order']
     list_filter = ('quiz', 'question_type')
     search_fields = ('text', 'quiz__title')
     inlines = [AnswerInline]
