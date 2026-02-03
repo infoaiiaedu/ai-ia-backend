@@ -171,15 +171,15 @@ class QuestionAdmin(SortableAdminMixin, admin.ModelAdmin):
         js = ('admin/js/question_type_toggle.js',)
 
 
-@admin.register(Answer)
-class AnswerAdmin(SortableAdminMixin, admin.ModelAdmin):
-    list_display = ('text', 'question', 'is_correct', 'order')
-    list_filter = ('is_correct', 'question__quiz')
-    search_fields = ('text', 'question__text')
-    ordering = ('question', 'order')
-    fieldsets = (
-        ('ინფორმაცია', {
-            'fields': ('question', 'text', 'is_correct')
-        }),
-    )
-    list_editable = ('is_correct', 'order')
+# @admin.register(Answer)
+# class AnswerAdmin(SortableAdminMixin, admin.ModelAdmin):
+#     list_display = ('text', 'question', 'is_correct', 'order')
+#     list_filter = ('is_correct', 'question__quiz')
+#     search_fields = ('text', 'question__text')
+#     ordering = ('question', 'order')
+#     fieldsets = (
+#         ('ინფორმაცია', {
+#             'fields': ('question', 'text', 'is_correct')
+#         }),
+#     )
+#     list_editable = ('is_correct', 'order')

@@ -38,8 +38,6 @@ REDIS_URI = project_env.get("REDIS_URI")
 
 
 AUTH_USER_MODEL = "user.User"
-
-SITE_NAME = "AI-IA"
 # SITE_LOGO_URL = "/static/img/logo/logo_icon_32x32.png"
 
 INSTALLED_APPS = [
