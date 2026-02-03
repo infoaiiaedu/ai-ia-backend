@@ -42,6 +42,7 @@ class QuestionSchema(Schema):
     id: int
     text: str
     question_type: str
+    level: int
     xp: int
     correct_text_answer: Optional[str] = None
     explanation: Optional[str] = None
@@ -51,6 +52,7 @@ class QuestionSchema(Schema):
 class QuestionIn(Schema):
     text: str
     question_type: str
+    level: int
     xp: Optional[int] = 10
     correct_text_answer: Optional[str] = None
     explanation: Optional[str] = None
@@ -60,7 +62,6 @@ class QuizSchema(Schema):
     id: int
     title: str
     description: Optional[str] = None
-    level: int
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -71,7 +72,6 @@ class QuizSchema(Schema):
 class QuizIn(Schema):
     title: str
     description: Optional[str] = None
-    level: int
     is_active: Optional[bool] = True
 
 
@@ -81,19 +81,19 @@ class PublicAnswerSchema(Schema):
 
 
 class PublicQuestionSchema(Schema):
-        id: int
-        text: str
-        question_type: str
-        xp: int
-        explanation: Optional[str] = None
-        answers: List[PublicAnswerSchema] = []
+    id: int
+    text: str
+    question_type: str
+    level: int
+    xp: int
+    explanation: Optional[str] = None
+    answers: List[PublicAnswerSchema] = []
 
 
 class PublicQuizSchema(Schema):
     id: int
     title: str
     description: Optional[str] = None
-    level: int
     is_active: bool
     created_at: datetime
     updated_at: datetime

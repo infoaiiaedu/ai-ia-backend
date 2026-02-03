@@ -89,7 +89,7 @@ class AnswerInline(SortableInlineAdminMixin, admin.TabularInline):
 class QuestionForm(ModelForm):
     class Meta:
         model = Question
-        fields = ('text', 'question_type', 'xp', 'correct_text_answer', 'explanation')
+        fields = ('text', 'question_type', 'level', 'xp', 'correct_text_answer', 'explanation')
 
     class Media:
         js = ('admin/js/question_type_toggle.js', 'adminsortable2/js/adminsortable2.js')
@@ -109,7 +109,7 @@ class QuestionInline(admin.StackedInline):
     form = QuestionForm
     extra = 1
     show_change_link = True
-    fields = ['text', 'question_type', 'xp', 'correct_text_answer']
+    fields = ['text', 'question_type', 'level', 'xp', 'correct_text_answer']
     verbose_name = "კითხვა"
     verbose_name_plural = "კითხვები"
 
@@ -119,7 +119,7 @@ class QuestionInline(admin.StackedInline):
 
 @admin.register(Quiz)
 class QuizAdmin(admin.ModelAdmin):
-    list_display = ('title', 'subject', 'grade', 'level', 'created_at', 'updated_at')
+    list_display = ('title', 'subject', 'grade', 'created_at', 'updated_at')
     inlines = [QuestionInline]
     search_fields = ('title',)
     list_filter = ('subject', 'grade', 'is_active')
@@ -133,15 +133,15 @@ class QuizAdmin(admin.ModelAdmin):
 @admin.register(Question)
 class QuestionAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = QuestionAdminForm
-    list_display = ['text_short', 'quiz', 'question_type', 'xp', 'order']
-    list_filter = ('quiz', 'question_type')
+    list_display = ['text_short', 'quiz', 'question_type', 'level', 'xp', 'order']
+    list_filter = (('quiz', admin.RelatedOnlyFieldListFilter), 'question_type')
     search_fields = ('text', 'quiz__title')
     inlines = [AnswerInline]
     autocomplete_fields = ('quiz',)
 
     fieldsets = (
         ('ძირითადი ინფორმაცია', {
-            'fields': ('quiz', 'text', 'question_type', 'order', 'xp')
+            'fields': ('quiz', 'text', 'question_type', 'level', 'order', 'xp')
         }),
         ('პასუხები', {
             'fields': ('correct_text_answer',),
