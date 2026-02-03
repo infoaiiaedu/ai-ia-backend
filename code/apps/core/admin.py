@@ -12,6 +12,19 @@ from .models import Subject, Grade, Topic, Quiz, Question, Answer
 logger = logging.getLogger(__name__)
 
 
+class QuizTitleFilter(admin.SimpleListFilter):
+    title = "Quiz"
+    parameter_name = "quiz"
+
+    def lookups(self, request, model_admin):
+        return Quiz.objects.values_list("id", "title")
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(quiz_id=self.value())
+        return queryset
+
+
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
     form = SubjectForm
@@ -134,7 +147,7 @@ class QuizAdmin(admin.ModelAdmin):
 class QuestionAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = QuestionAdminForm
     list_display = ['text_short', 'quiz', 'question_type', 'level', 'xp', 'order']
-    list_filter = ['quiz', 'question_type']
+    list_filter = (QuizTitleFilter, 'question_type')
     search_fields = ('text', 'quiz__title')
     inlines = [AnswerInline]
     autocomplete_fields = ('quiz',)
