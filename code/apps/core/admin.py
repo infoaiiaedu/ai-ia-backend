@@ -134,7 +134,7 @@ class QuizAdmin(admin.ModelAdmin):
 class QuestionAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = QuestionAdminForm
     list_display = ['text_short', 'quiz', 'question_type', 'level', 'xp', 'order']
-    list_filter = (('quiz', admin.RelatedOnlyFieldListFilter), 'question_type')
+    list_filter = ['quiz', 'question_type']
     search_fields = ('text', 'quiz__title')
     inlines = [AnswerInline]
     autocomplete_fields = ('quiz',)
