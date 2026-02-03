@@ -127,7 +127,7 @@ class Question(models.Model):
     quiz = models.ForeignKey(Quiz, related_name="questions", on_delete=models.CASCADE, verbose_name="ქვიზი")
     text = models.TextField(verbose_name="კითხვის ტექსტი")
     question_type = models.CharField(max_length=10, choices=QUESTION_TYPES, verbose_name="კითხვის ტიპი")
-    level = models.PositiveSmallIntegerField(verbose_name="დონე")
+    level = models.PositiveSmallIntegerField(default=1, verbose_name="დონე")
     order = models.PositiveSmallIntegerField(default=0, verbose_name="მიმდევრობა")
     
     xp = models.PositiveIntegerField(default=10, verbose_name="XP per question")
