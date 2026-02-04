@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView, RedirectView
 from api import api
-import settings
+from django.conf import settings
 
 admin.site.site_header = settings.SITE_NAME
 
