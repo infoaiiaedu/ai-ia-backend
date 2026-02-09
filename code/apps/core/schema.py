@@ -10,10 +10,19 @@ class GradeSchema(Schema):
 class SubjectSchema(Schema):
     id: int
     name: str
+    short_description: Optional[str] = None
     icon: Optional[dict] = None
     grade: Optional[GradeSchema] = None
     topics_count: int = 0
     quizzes_count: int = 0
+
+
+class ParentSubjectSchema(Schema):
+    id: int
+    name: str
+    grade: Optional[GradeSchema] = None
+    short_description: Optional[str] = None
+    topics: List[str] = []
 
 
 class TopicSchema(Schema):

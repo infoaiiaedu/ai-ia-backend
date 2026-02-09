@@ -4,6 +4,11 @@ from django.utils import timezone
 
 class Subject(models.Model):
     name = models.CharField(max_length=100, verbose_name="საგნის სახელი")
+    short_description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="მოკლე აღწერა",
+    )
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="ფასი")
     grade = models.ForeignKey(
         "Grade",

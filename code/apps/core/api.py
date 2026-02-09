@@ -24,12 +24,13 @@ from .schema import (
     QuizSubmission,
     AnswerResult,
     QuizSubmissionResult,
+    ParentSubjectSchema,
 )
 
 router = Router()
 
 
-@router.get("/subjects/", response=List[SubjectSchema])
+@router.get("/child/subjects/", response=List[SubjectSchema])
 def list_subjects(request, grade_id: Optional[int] = None):
     subjects = Subject.objects.filter(is_active=True)
     if grade_id is not None:
@@ -41,7 +42,25 @@ def list_subjects(request, grade_id: Optional[int] = None):
     return subjects.distinct()
 
 
-@router.get("/subjects/{subject_id}/", response=SubjectSchema)
+@router.get("/parent/subjects/", response=List[ParentSubjectSchema])
+def list_parent_subjects(request, grade_id: Optional[int] = None):
+    subjects = Subject.objects.filter(is_active=True).select_related("grade").prefetch_related("topics")
+    if grade_id is not None:
+        subjects = subjects.filter(grade_id=grade_id)
+
+    return [
+        {
+            "id": subject.id,
+            "name": subject.name,
+            "grade": subject.grade,
+            "short_description": subject.short_description,
+            "topics": list(subject.topics.order_by("order").values_list("name", flat=True)),
+        }
+        for subject in subjects
+    ]
+
+
+@router.get("/child/subjects/{subject_id}/", response=SubjectSchema)
 def get_subject(request, subject_id: int):
     return get_object_or_404(
         Subject.objects.annotate(
