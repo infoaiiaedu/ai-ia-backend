@@ -23,6 +23,7 @@ class ParentSubjectSchema(Schema):
     name: str
     grade: Optional[GradeSchema] = None
     short_description: Optional[str] = None
+    icon: Optional[dict] = None
     cover_image: Optional[dict] = None
     topics: List[str] = []
 
