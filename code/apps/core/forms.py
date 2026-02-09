@@ -26,5 +26,6 @@ class SubjectForm(forms.ModelForm):
         fields = "__all__"
         widgets = {
             "icon": ImageWidget(),
+            "cover_image": ImageWidget(),
             "short_description": TinymceWidget(name="default"),
         }

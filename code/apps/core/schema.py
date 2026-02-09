@@ -12,6 +12,7 @@ class SubjectSchema(Schema):
     name: str
     short_description: Optional[str] = None
     icon: Optional[dict] = None
+    image: Optional[dict] = None
     grade: Optional[GradeSchema] = None
     topics_count: int = 0
     quizzes_count: int = 0
@@ -22,6 +23,7 @@ class ParentSubjectSchema(Schema):
     name: str
     grade: Optional[GradeSchema] = None
     short_description: Optional[str] = None
+    image: Optional[dict] = None
     topics: List[str] = []
 
 

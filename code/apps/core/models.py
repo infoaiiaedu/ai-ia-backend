@@ -22,6 +22,10 @@ class Subject(models.Model):
     icon = models.JSONField(
         null=True, blank=True, editable=True, verbose_name="აიქონი"
     )
+
+    cover_mage = models.JSONField(
+        null=True, blank=True, editable=True, verbose_name="ქავერის ფოტო"
+    )
     
     is_active = models.BooleanField(default=True, verbose_name="აქტიური")
 
