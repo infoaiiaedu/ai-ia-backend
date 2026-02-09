@@ -23,7 +23,7 @@ class Subject(models.Model):
         null=True, blank=True, editable=True, verbose_name="აიქონი"
     )
 
-    cover_mage = models.JSONField(
+    cover_image = models.JSONField(
         null=True, blank=True, editable=True, verbose_name="ქავერის ფოტო"
     )
     
