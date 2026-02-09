@@ -54,6 +54,7 @@ def list_parent_subjects(request, grade_id: Optional[int] = None):
             "name": subject.name,
             "grade": subject.grade,
             "short_description": subject.short_description,
+            "icon": subject.icon,
             "cover_image": subject.cover_image,
             "topics": list(subject.topics.order_by("order").values_list("name", flat=True)),
         }
