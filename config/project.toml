@@ -8,6 +8,15 @@ ALLOWED_HOSTS = ["*"]  # Allow all hosts for development. In production, specify
 CSRF_TRUSTED_ORIGINS = ["http://localhost", "http://127.0.0.1", "http://localhost:8080", "http://127.0.0.1:8080", "http://admin.eduaiia.com", "http://api.eduaiia.com", "https://admin.eduaiia.com", "https://api.eduaiia.com"]
 REDIS_URI = "redis://redis:6379/0"
 
+[email]
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = true
+EMAIL_HOST_USER = "infoaiiaedu@gmail.com"
+EMAIL_HOST_PASSWORD = "udek vrza ncpu htzu"
+DEFAULT_FROM_EMAIL = "AI-IA <infoaiiaedu@gmail.com>"
+
 [database]
 ENGINE = "postgresql"
 NAME = "ai_db"

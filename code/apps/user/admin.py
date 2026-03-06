@@ -12,8 +12,8 @@ class ChildInline(admin.TabularInline):
 
 @admin.register(Parent)
 class ParentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'mobile_phone')
-    search_fields = ('name', 'mobile_phone')
+    list_display = ('name', 'email', 'mobile_phone')
+    search_fields = ('name', 'email', 'mobile_phone')
     inlines = [ChildInline]
 
 @admin.register(Logo)
@@ -23,7 +23,7 @@ class LogoAdmin(admin.ModelAdmin):
 
 @admin.register(Child)
 class ChildAdmin(admin.ModelAdmin):
-    list_display = ('name', 'parent', 'grade')
+    list_display = ('name', 'parent', 'grade', 'subject', 'sex')
     autocomplete_fields = ('parent', 'logo')
     list_filter = ('grade',)
     search_fields = ('name', 'parent__name')

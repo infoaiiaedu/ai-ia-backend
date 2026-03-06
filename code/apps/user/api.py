@@ -1,9 +1,14 @@
 from ninja import Router, Form
+from typing import List, Optional
+from datetime import date
+from django.utils import timezone
 from ninja.errors import HttpError
 from ninja.security import HttpBearer
-from apps.user.models import Parent, Child, Logo
-from .schema import TokenSchema, ChildRegisterSchema, OTPResponseSchema
-from .utils import decode_jwt_token
+from apps.user.models import Parent, Child, Logo, DiagnosticSession
+from apps.core.models import Subject, Topic, Question, Answer
+from .schema import TokenSchema, ChildRegisterSchema, OTPResponseSchema, AvatarSchema, ChildLoginSchema
+from .schema import ParentChildSchema, DiagnosticAnswerSchema, DiagnosticResponseSchema
+from .utils import decode_jwt_token, decode_child_jwt_token
 from django.shortcuts import get_object_or_404
 
 router = Router()
@@ -20,6 +25,14 @@ class AuthBearer(HttpBearer):
         return account
 
 
+class ChildAuthBearer(HttpBearer):
+    def authenticate(self, request, token):
+        account, valid = decode_child_jwt_token(token)
+        if not valid:
+            return None
+        return account
+
+
 # ---------------------------
 # Parent Registration (sends OTP via Twilio)
 # ---------------------------
@@ -27,20 +40,60 @@ class AuthBearer(HttpBearer):
 def parent_register(
     request,
     name: str = Form(...),
-    mobile_phone: str = Form(...),
+    contact: str = Form(...),
 ):
-    if Parent.objects.filter(mobile_phone=mobile_phone).exists():
-        raise HttpError(400, "Parent with this mobile phone already exists")
+    clean_name = name.strip()
+    contact_value = contact.strip()
 
-    parent = Parent.objects.create(name=name, mobile_phone=mobile_phone)
+    if not clean_name:
+        raise HttpError(400, "Name is required")
+    if not contact_value:
+        raise HttpError(400, "Email or phone is required")
 
-    parent.generate_otp()               # Generate OTP
-    result = parent.send_otp_sms()      # Send via Twilio
+    is_email = "@" in contact_value
+    if is_email:
+        if Parent.objects.filter(email__iexact=contact_value).exists():
+            raise HttpError(400, "Parent with this email already exists")
+        parent = Parent.objects.create(name=clean_name, email=contact_value.lower())
+        parent.generate_otp()
+        result = parent.send_otp_email()
+    else:
+        if Parent.objects.filter(mobile_phone=contact_value).exists():
+            raise HttpError(400, "Parent with this mobile phone already exists")
+        parent = Parent.objects.create(name=clean_name, mobile_phone=contact_value)
+        parent.generate_otp()
+        result = parent.send_otp_sms()
 
     if not result.get("success"):
-        raise HttpError(500, f"Failed to send SMS: {result.get('error')}")
+        raise HttpError(500, f"Failed to send OTP: {result.get('error')}")
 
-    return {"message": "Parent created. Check your mobile for OTP."}
+    return {"message": "Parent created. Check your email or phone for OTP."}
+
+
+# ---------------------------
+# Parent Login (sends OTP)
+# ---------------------------
+@router.post("/parent/login/", response=OTPResponseSchema)
+def parent_login(
+    request,
+    email: str = Form(...),
+):
+    email_value = email.strip()
+    if not email_value:
+        raise HttpError(400, "Email is required")
+
+    try:
+        parent = Parent.objects.get(email__iexact=email_value)
+    except Parent.DoesNotExist:
+        raise HttpError(400, "Parent not found")
+
+    parent.generate_otp()
+    result = parent.send_otp_email()
+
+    if not result.get("success"):
+        raise HttpError(500, f"Failed to send OTP: {result.get('error')}")
+
+    return {"message": "OTP sent. Check your email."}
 
 
 # ---------------------------
@@ -49,11 +102,15 @@ def parent_register(
 @router.post("/parent/verify_otp/", response=TokenSchema)
 def parent_verify_otp(
     request,
-    mobile_phone: str = Form(...),
+    contact: str = Form(...),
     otp_code: str = Form(...),
 ):
     try:
-        parent = Parent.objects.get(mobile_phone=mobile_phone)
+        contact_value = contact.strip()
+        if "@" in contact_value:
+            parent = Parent.objects.get(email__iexact=contact_value)
+        else:
+            parent = Parent.objects.get(mobile_phone=contact_value)
     except Parent.DoesNotExist:
         raise HttpError(400, "Parent not found")
 
@@ -74,16 +131,26 @@ def parent_verify_otp(
 def child_register(request, data: ChildRegisterSchema):
     parent: Parent = request.auth
 
-    logo = None
-    if data.logo_id:
-        logo = get_object_or_404(Logo, id=data.logo_id)
+    first = data.first_name.strip()
+    last = data.last_name.strip()
+    if not first or not last:
+        raise HttpError(400, "Student first and last name are required")
+
+    gender_value = data.gender.strip().lower()
+    gender_map = {"boy": "male", "girl": "female", "male": "male", "female": "female"}
+    if gender_value not in gender_map:
+        raise HttpError(400, "Gender must be boy or girl")
+    gender = gender_map[gender_value]
+
+    subject = get_object_or_404(Subject, id=data.subject_id)
 
     child = Child.objects.create(
         parent=parent,
-        name=data.name,
+        name=f"{first} {last}".strip(),
         grade=data.grade,
-        nickname=data.nickname,
-        logo=logo,
+        subject=subject,
+        date_of_birth=data.date_of_birth,
+        sex=gender,
     )
 
     access_code = child.generate_access_code()
@@ -94,11 +161,28 @@ def child_register(request, data: ChildRegisterSchema):
     }
 
 @router.post("/child/login/", response=TokenSchema)
-def child_login(request, access_code: str = Form(...)):
+def child_login(request, data: ChildLoginSchema = Form(...)):
     try:
-        child = Child.objects.get(access_code=access_code)
+        clean_code = data.access_code.strip()
+        if not clean_code:
+            raise HttpError(400, "Access code is required")
+        child = Child.objects.get(access_code=clean_code)
     except Child.DoesNotExist:
         raise HttpError(400, "Invalid access code")
+
+    update_fields = []
+    if data.nickname is not None:
+        clean_nickname = data.nickname.strip()
+        child.nickname = clean_nickname or None
+        update_fields.append("nickname")
+
+    if data.avatar_id is not None:
+        logo = get_object_or_404(Logo, id=data.avatar_id)
+        child.logo = logo
+        update_fields.append("logo")
+
+    if update_fields:
+        child.save(update_fields=update_fields)
 
     tokens = child.generate_tokens()
     return {
@@ -106,3 +190,279 @@ def child_login(request, access_code: str = Form(...)):
         "refresh_token": tokens["refresh_token"],
         "message": f"Child {child.name} logged in successfully."
     }
+
+@router.get("/parent/children/", response=List[ParentChildSchema], auth=AuthBearer())
+def parent_children(request):
+    parent: Parent = request.auth
+    children = Child.objects.filter(parent=parent).select_related("subject")
+    today = date.today()
+
+    result = []
+    for child in children:
+        parts = child.name.split()
+        first_name = parts[0] if parts else ""
+        last_name = " ".join(parts[1:]) if len(parts) > 1 else ""
+        age = None
+        if child.date_of_birth:
+            age = today.year - child.date_of_birth.year
+            if (today.month, today.day) < (child.date_of_birth.month, child.date_of_birth.day):
+                age -= 1
+
+        subject = None
+        if child.subject:
+            subject = {"id": child.subject.id, "name": child.subject.name}
+
+        result.append(
+            {
+                "first_name": first_name,
+                "last_name": last_name,
+                "grade": child.grade,
+                "age": age,
+                "subject": subject,
+                "access_code": child.access_code,
+            }
+        )
+
+    return result
+
+
+def _topics_with_questions(subject: Subject) -> List[int]:
+    return list(
+        Topic.objects.filter(subject=subject, quizzes__questions__isnull=False)
+        .distinct()
+        .order_by("order", "id")
+        .values_list("id", flat=True)
+    )
+
+
+def _pick_question(topic_id: int, asked_ids: List[int]) -> Optional[Question]:
+    return (
+        Question.objects.filter(quiz__topics=topic_id)
+        .exclude(id__in=asked_ids)
+        .distinct()
+        .prefetch_related("answers")
+        .order_by("order", "id")
+        .first()
+    )
+
+
+def _serialize_diagnostic_question(question: Question, topic_id: int, topic_name: Optional[str]):
+    answers = []
+    if question.question_type == Question.MCQ:
+        answers = [
+            {"id": answer.id, "text": answer.text}
+            for answer in question.answers.all().order_by("order")
+        ]
+
+    return {
+        "id": question.id,
+        "text": question.text,
+        "question_type": question.question_type,
+        "answers": answers,
+        "topic_id": topic_id,
+        "topic_name": topic_name,
+    }
+
+
+def _build_topic_status(session: DiagnosticSession):
+    topic_map = Topic.objects.in_bulk(session.topics)
+    topics = []
+    weak_topics = []
+    for topic_id in session.topics:
+        topic = topic_map.get(topic_id)
+        status = session.topic_outcomes.get(str(topic_id), "unknown")
+        item = {"id": topic_id, "name": topic.name if topic else "", "status": status}
+        topics.append(item)
+        if status == "weak":
+            weak_topics.append(item)
+
+    return topics, weak_topics
+
+
+def _diagnostic_response(
+    session: DiagnosticSession,
+    question: Optional[Question] = None,
+    topic_id: Optional[int] = None,
+):
+    payload = {
+        "session_id": session.id,
+        "is_complete": session.is_complete,
+        "total_answered": session.total_answered,
+        "max_questions": session.max_questions,
+        "question": None,
+        "weak_topics": [],
+        "topics": [],
+    }
+
+    if question is not None and topic_id is not None:
+        topic_name = Topic.objects.filter(id=topic_id).values_list("name", flat=True).first()
+        payload["question"] = _serialize_diagnostic_question(question, topic_id, topic_name)
+
+    if session.is_complete:
+        topics, weak_topics = _build_topic_status(session)
+        payload["topics"] = topics
+        payload["weak_topics"] = weak_topics
+
+    return payload
+
+
+@router.post("/child/diagnostic/start/", response=DiagnosticResponseSchema, auth=ChildAuthBearer())
+def diagnostic_start(request, max_questions: Optional[int] = Form(None)):
+    child: Child = request.auth
+    if not child.subject:
+        raise HttpError(400, "Child has no subject")
+
+    topics = _topics_with_questions(child.subject)
+    if not topics:
+        raise HttpError(400, "No diagnostic topics available")
+
+    session = DiagnosticSession.objects.filter(
+        child=child, subject=child.subject, is_complete=False
+    ).order_by("-created_at").first()
+
+    if session is None:
+        max_q = max_questions if max_questions and max_questions > 0 else 12
+        session = DiagnosticSession.objects.create(
+            child=child,
+            subject=child.subject,
+            topics=topics,
+            low_index=0,
+            high_index=len(topics) - 1,
+            current_index=(len(topics) - 1) // 2,
+            max_questions=max_q,
+        )
+
+    if session.current_question_id and session.total_answered < len(session.asked_question_ids):
+        question = Question.objects.prefetch_related("answers").get(id=session.current_question_id)
+        topic_id = session.current_topic_id or session.topics[session.current_index]
+        return _diagnostic_response(session, question, topic_id)
+
+    topic_id = session.topics[session.current_index]
+    question = _pick_question(topic_id, session.asked_question_ids)
+    if not question:
+        session.is_complete = True
+        session.completed_at = timezone.now()
+        session.save(update_fields=["is_complete", "completed_at"])
+        return _diagnostic_response(session)
+
+    session.current_topic_id = topic_id
+    session.current_question_id = question.id
+    if question.id not in session.asked_question_ids:
+        session.asked_question_ids.append(question.id)
+    session.save(update_fields=["current_topic_id", "current_question_id", "asked_question_ids"])
+
+    return _diagnostic_response(session, question, topic_id)
+
+
+@router.post("/child/diagnostic/answer/", response=DiagnosticResponseSchema, auth=ChildAuthBearer())
+def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
+    child: Child = request.auth
+    session = get_object_or_404(DiagnosticSession, id=data.session_id, child=child)
+    if session.is_complete:
+        return _diagnostic_response(session)
+
+    if session.current_question_id != data.question_id:
+        raise HttpError(400, "Question does not match current session")
+
+    question = Question.objects.prefetch_related("answers").get(id=data.question_id)
+    topic_id = session.current_topic_id
+    if topic_id is None:
+        raise HttpError(400, "No active topic for this session")
+
+    is_correct = False
+    if question.question_type == Question.MCQ:
+        if data.answer_id:
+            answer = Answer.objects.filter(id=data.answer_id, question=question).first()
+            is_correct = bool(answer and answer.is_correct)
+    else:
+        if data.text and question.correct_text_answer:
+            is_correct = data.text.strip().lower() == question.correct_text_answer.strip().lower()
+
+    stats_key = str(topic_id)
+    stats = session.topic_stats.get(stats_key, {"asked": 0, "correct": 0})
+    stats["asked"] += 1
+    if is_correct:
+        stats["correct"] += 1
+    session.topic_stats[stats_key] = stats
+    session.total_answered += 1
+
+    if not is_correct and stats["asked"] < 2 and session.total_answered < session.max_questions:
+        next_question = _pick_question(topic_id, session.asked_question_ids)
+        if next_question:
+            session.current_topic_id = topic_id
+            session.current_question_id = next_question.id
+            if next_question.id not in session.asked_question_ids:
+                session.asked_question_ids.append(next_question.id)
+            session.save(update_fields=[
+                "current_topic_id",
+                "current_question_id",
+                "asked_question_ids",
+                "topic_stats",
+                "total_answered",
+            ])
+            return _diagnostic_response(session, next_question, topic_id)
+
+    outcome = "known" if stats["correct"] > 0 else "weak"
+    session.topic_outcomes[stats_key] = outcome
+    if outcome == "known":
+        session.low_index = session.current_index + 1
+    else:
+        session.high_index = session.current_index - 1
+
+    if session.total_answered >= session.max_questions or session.low_index > session.high_index:
+        session.is_complete = True
+        session.completed_at = timezone.now()
+        session.current_question_id = None
+        session.current_topic_id = None
+        session.save(update_fields=[
+            "is_complete",
+            "completed_at",
+            "current_question_id",
+            "current_topic_id",
+            "topic_outcomes",
+            "topic_stats",
+            "total_answered",
+            "low_index",
+            "high_index",
+        ])
+        return _diagnostic_response(session)
+
+    session.current_index = (session.low_index + session.high_index) // 2
+    next_topic_id = session.topics[session.current_index]
+    next_question = _pick_question(next_topic_id, session.asked_question_ids)
+    if not next_question:
+        session.is_complete = True
+        session.completed_at = timezone.now()
+        session.current_question_id = None
+        session.current_topic_id = None
+        session.save(update_fields=[
+            "is_complete",
+            "completed_at",
+            "current_question_id",
+            "current_topic_id",
+            "topic_outcomes",
+            "topic_stats",
+            "total_answered",
+            "low_index",
+            "high_index",
+            "current_index",
+        ])
+        return _diagnostic_response(session)
+
+    session.current_topic_id = next_topic_id
+    session.current_question_id = next_question.id
+    if next_question.id not in session.asked_question_ids:
+        session.asked_question_ids.append(next_question.id)
+    session.save(update_fields=[
+        "current_topic_id",
+        "current_question_id",
+        "asked_question_ids",
+        "topic_outcomes",
+        "topic_stats",
+        "total_answered",
+        "low_index",
+        "high_index",
+        "current_index",
+    ])
+
+    return _diagnostic_response(session, next_question, next_topic_id)

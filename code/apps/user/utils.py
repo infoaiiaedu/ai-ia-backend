@@ -1,7 +1,7 @@
 import jwt
 from main.settings import JWT_SECRET_KEY, JWT_ALGORITHM
 from datetime import datetime, timedelta
-from apps.user.models import Parent
+from apps.user.models import Parent, Child
 
 from datetime import timedelta
 
@@ -24,6 +24,19 @@ def decode_jwt_token(token):
     except jwt.ExpiredSignatureError:
         return None, False
     except (jwt.InvalidTokenError, Parent.DoesNotExist):
+        return None, False
+
+
+def decode_child_jwt_token(token):
+    try:
+        decoded_payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+        if decoded_payload.get("account_type") != "Child":
+            return None, False
+        account = Child.objects.get(id=decoded_payload["account_id"])
+        return account, True
+    except jwt.ExpiredSignatureError:
+        return None, False
+    except (jwt.InvalidTokenError, Child.DoesNotExist, KeyError):
         return None, False
     
     

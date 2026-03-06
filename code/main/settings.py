@@ -236,6 +236,21 @@ STATICFILES_DIRS = [
     BASE_DIR / "static_cdn",
 ]
 
+email_env = env.get("email", {})
+EMAIL_BACKEND = email_env.get(
+    "EMAIL_BACKEND",
+    project_env.get("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend"),
+)
+EMAIL_HOST = email_env.get("EMAIL_HOST", project_env.get("EMAIL_HOST", "localhost"))
+EMAIL_PORT = int(email_env.get("EMAIL_PORT", project_env.get("EMAIL_PORT", 25)))
+EMAIL_USE_TLS = email_env.get("EMAIL_USE_TLS", project_env.get("EMAIL_USE_TLS", False))
+EMAIL_HOST_USER = email_env.get("EMAIL_HOST_USER", project_env.get("EMAIL_HOST_USER", ""))
+EMAIL_HOST_PASSWORD = email_env.get("EMAIL_HOST_PASSWORD", project_env.get("EMAIL_HOST_PASSWORD", ""))
+DEFAULT_FROM_EMAIL = email_env.get(
+    "DEFAULT_FROM_EMAIL",
+    project_env.get("DEFAULT_FROM_EMAIL", "no-reply@localhost"),
+)
+
 JWT_SECRET_KEY = project_env["SECRET_KEY"]
 JWT_ALGORITHM = "HS256"
 JWT_EXP_DELTA_SECONDS = 3600
