@@ -13,7 +13,6 @@ class SubjectSchema(Schema):
     short_description: Optional[str] = None
     icon: Optional[dict] = None
     cover_image: Optional[dict] = None
-    grade: Optional[GradeSchema] = None
     topics_count: int = 0
     quizzes_count: int = 0
 
@@ -21,7 +20,6 @@ class SubjectSchema(Schema):
 class ParentSubjectSchema(Schema):
     id: int
     name: str
-    grade: Optional[GradeSchema] = None
     short_description: Optional[str] = None
     icon: Optional[dict] = None
     cover_image: Optional[dict] = None
@@ -32,6 +30,7 @@ class TopicSchema(Schema):
     id: int
     name: str
     subject: Optional[SubjectSchema] = None
+    grade: Optional[GradeSchema] = None
     image: Optional[dict] = None
     video: Optional[dict] = None
     description: Optional[str] = None

@@ -10,15 +10,6 @@ class Subject(models.Model):
         verbose_name="მოკლე აღწერა",
     )
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="ფასი")
-    grade = models.ForeignKey(
-        "Grade",
-        on_delete=models.CASCADE,
-        related_name="subjects",
-        null=True,
-        blank=True,
-        verbose_name="კლასი",
-    )
-    
     icon = models.JSONField(
         null=True, blank=True, editable=True, verbose_name="აიქონი"
     )
@@ -49,6 +40,14 @@ class Grade(models.Model):
 class Topic(models.Model):
     name = models.CharField(max_length=100, verbose_name="თემის სახელი")
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='topics', null=True, blank=True, verbose_name="საგანი")
+    grade = models.ForeignKey(
+        "Grade",
+        on_delete=models.CASCADE,
+        related_name="topics",
+        null=True,
+        blank=True,
+        verbose_name="კლასი",
+    )
     
     image = models.JSONField(
         null=True, blank=True, editable=True, verbose_name="სურათი"

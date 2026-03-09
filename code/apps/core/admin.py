@@ -28,11 +28,10 @@ class QuizTitleFilter(admin.SimpleListFilter):
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
     form = SubjectForm
-    list_display = ('name', 'grade', 'price', 'is_active')
+    list_display = ('name', 'price', 'is_active')
     search_fields = ('name',)
     ordering = ('name',)
-    list_filter = ('grade', 'is_active')
-    autocomplete_fields = ('grade',)
+    list_filter = ('is_active',)
 
 
 @admin.register(Grade)
@@ -44,11 +43,11 @@ class GradeAdmin(admin.ModelAdmin):
 @admin.register(Topic)
 class TopicAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = TopicForm
-    list_display = ['name', 'subject', 'order']
+    list_display = ['name', 'subject', 'grade', 'order']
     search_fields = ['name']
-    list_filter = ('subject',)
+    list_filter = ('subject', 'grade')
     ordering = ['order']
-    autocomplete_fields = ['subject']
+    autocomplete_fields = ['subject', 'grade']
     sortable_field_name = 'order'
 
 
