@@ -1,3 +1,5 @@
+import random
+
 from ninja import Router, Form
 from typing import List, Optional
 from datetime import date
@@ -375,13 +377,20 @@ def diagnostic_start(
             max_q = 22
         if max_m > 12:
             max_m = 12
+        eligible_topic_ids = list(
+            Topic.objects.filter(id__in=topics, quizzes__questions__level=2)
+            .distinct()
+            .values_list("id", flat=True)
+        )
+        start_topic_id = random.choice(eligible_topic_ids or topics)
+        start_index = topics.index(start_topic_id) if start_topic_id in topics else (len(topics) - 1) // 2
         session = DiagnosticSession.objects.create(
             child=child,
             subject=child.subject,
             topics=topics,
             low_index=0,
             high_index=len(topics) - 1,
-            current_index=(len(topics) - 1) // 2,
+            current_index=start_index,
             current_level=2,
             max_questions=max_q,
             max_minutes=max_m,
