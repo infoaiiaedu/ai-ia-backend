@@ -235,15 +235,26 @@ def _topics_with_questions(subject: Subject) -> List[int]:
     )
 
 
-def _pick_question(topic_id: int, asked_ids: List[int]) -> Optional[Question]:
-    return (
+def _pick_question(topic_id: int, asked_ids: List[int], level: Optional[int] = None) -> Optional[Question]:
+    qs = (
         Question.objects.filter(quiz__topics=topic_id)
         .exclude(id__in=asked_ids)
         .distinct()
         .prefetch_related("answers")
-        .order_by("order", "id")
-        .first()
     )
+    if level:
+        qs = qs.filter(level=level)
+    question = qs.order_by("order", "id").first()
+    if question is None and level is not None:
+        question = (
+            Question.objects.filter(quiz__topics=topic_id)
+            .exclude(id__in=asked_ids)
+            .distinct()
+            .prefetch_related("answers")
+            .order_by("order", "id")
+            .first()
+        )
+    return question
 
 
 def _serialize_diagnostic_question(question: Question, topic_id: int, topic_name: Optional[str]):
@@ -284,12 +295,17 @@ def _diagnostic_response(
     question: Optional[Question] = None,
     topic_id: Optional[int] = None,
 ):
+    expires_at = session.created_at + timezone.timedelta(minutes=session.max_minutes)
+    remaining_seconds = max(0, int((expires_at - timezone.now()).total_seconds()))
     payload = {
         "session_id": session.id,
         "is_complete": session.is_complete,
         "total_answered": session.total_answered,
         "max_questions": session.max_questions,
+        "max_minutes": session.max_minutes,
+        "time_remaining_seconds": remaining_seconds if not session.is_complete else 0,
         "question": None,
+        "boundary_topic": None,
         "weak_topics": [],
         "topics": [],
     }
@@ -302,12 +318,24 @@ def _diagnostic_response(
         topics, weak_topics = _build_topic_status(session)
         payload["topics"] = topics
         payload["weak_topics"] = weak_topics
+        if session.boundary_topic_id:
+            boundary_topic = Topic.objects.filter(id=session.boundary_topic_id).first()
+            if boundary_topic:
+                payload["boundary_topic"] = {
+                    "id": boundary_topic.id,
+                    "name": boundary_topic.name,
+                    "status": "weak",
+                }
 
     return payload
 
 
 @router.post("/child/diagnostic/start/", response=DiagnosticResponseSchema, auth=ChildAuthBearer())
-def diagnostic_start(request, max_questions: Optional[int] = Form(None)):
+def diagnostic_start(
+    request,
+    max_questions: Optional[int] = Form(None),
+    max_minutes: Optional[int] = Form(None),
+):
     child: Child = request.auth
     if not child.subject:
         raise HttpError(400, "Child has no subject")
@@ -320,8 +348,20 @@ def diagnostic_start(request, max_questions: Optional[int] = Form(None)):
         child=child, subject=child.subject, is_complete=False
     ).order_by("-created_at").first()
 
-    if session is None:
-        max_q = max_questions if max_questions and max_questions > 0 else 12
+    if session is not None:
+        expires_at = session.created_at + timezone.timedelta(minutes=session.max_minutes)
+        if timezone.now() >= expires_at:
+            session.is_complete = True
+            session.completed_at = timezone.now()
+            session.save(update_fields=["is_complete", "completed_at"])
+
+    if session is None or session.is_complete:
+        max_q = max_questions if max_questions and max_questions > 0 else 22
+        max_m = max_minutes if max_minutes and max_minutes > 0 else 12
+        if max_q > 22:
+            max_q = 22
+        if max_m > 12:
+            max_m = 12
         session = DiagnosticSession.objects.create(
             child=child,
             subject=child.subject,
@@ -329,8 +369,13 @@ def diagnostic_start(request, max_questions: Optional[int] = Form(None)):
             low_index=0,
             high_index=len(topics) - 1,
             current_index=(len(topics) - 1) // 2,
+            current_level=2,
             max_questions=max_q,
+            max_minutes=max_m,
         )
+    elif session.current_level not in (1, 2, 3):
+        session.current_level = 2
+        session.save(update_fields=["current_level"])
 
     if session.current_question_id and session.total_answered < len(session.asked_question_ids):
         question = Question.objects.prefetch_related("answers").get(id=session.current_question_id)
@@ -338,7 +383,7 @@ def diagnostic_start(request, max_questions: Optional[int] = Form(None)):
         return _diagnostic_response(session, question, topic_id)
 
     topic_id = session.topics[session.current_index]
-    question = _pick_question(topic_id, session.asked_question_ids)
+    question = _pick_question(topic_id, session.asked_question_ids, session.current_level)
     if not question:
         session.is_complete = True
         session.completed_at = timezone.now()
@@ -359,6 +404,20 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
     child: Child = request.auth
     session = get_object_or_404(DiagnosticSession, id=data.session_id, child=child)
     if session.is_complete:
+        return _diagnostic_response(session)
+
+    expires_at = session.created_at + timezone.timedelta(minutes=session.max_minutes)
+    if timezone.now() >= expires_at:
+        session.is_complete = True
+        session.completed_at = timezone.now()
+        session.current_question_id = None
+        session.current_topic_id = None
+        session.save(update_fields=[
+            "is_complete",
+            "completed_at",
+            "current_question_id",
+            "current_topic_id",
+        ])
         return _diagnostic_response(session)
 
     if session.current_question_id != data.question_id:
@@ -387,7 +446,7 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
     session.total_answered += 1
 
     if not is_correct and stats["asked"] < 2 and session.total_answered < session.max_questions:
-        next_question = _pick_question(topic_id, session.asked_question_ids)
+        next_question = _pick_question(topic_id, session.asked_question_ids, session.current_level)
         if next_question:
             session.current_topic_id = topic_id
             session.current_question_id = next_question.id
@@ -404,6 +463,21 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
 
     outcome = "known" if stats["correct"] > 0 else "weak"
     session.topic_outcomes[stats_key] = outcome
+    if outcome == "known":
+        session.current_level = min(3, session.current_level + 1)
+    else:
+        session.current_level = max(1, session.current_level - 1)
+    if outcome == "weak":
+        if session.boundary_topic_id is None:
+            session.boundary_topic_id = topic_id
+        else:
+            current_index = session.current_index
+            try:
+                boundary_index = session.topics.index(session.boundary_topic_id)
+            except ValueError:
+                boundary_index = current_index
+            if current_index < boundary_index:
+                session.boundary_topic_id = topic_id
     if outcome == "known":
         session.low_index = session.current_index + 1
     else:
@@ -424,12 +498,14 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
             "total_answered",
             "low_index",
             "high_index",
+            "boundary_topic_id",
+            "current_level",
         ])
         return _diagnostic_response(session)
 
     session.current_index = (session.low_index + session.high_index) // 2
     next_topic_id = session.topics[session.current_index]
-    next_question = _pick_question(next_topic_id, session.asked_question_ids)
+    next_question = _pick_question(next_topic_id, session.asked_question_ids, session.current_level)
     if not next_question:
         session.is_complete = True
         session.completed_at = timezone.now()
@@ -446,6 +522,7 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
             "low_index",
             "high_index",
             "current_index",
+            "current_level",
         ])
         return _diagnostic_response(session)
 
@@ -463,6 +540,8 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
         "low_index",
         "high_index",
         "current_index",
+        "boundary_topic_id",
+        "current_level",
     ])
 
     return _diagnostic_response(session, next_question, next_topic_id)

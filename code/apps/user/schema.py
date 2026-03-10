@@ -94,7 +94,10 @@ class DiagnosticResponseSchema(Schema):
     is_complete: bool
     total_answered: int
     max_questions: int
+    max_minutes: int
+    time_remaining_seconds: Optional[int] = None
     question: Optional[DiagnosticQuestionSchema] = None
+    boundary_topic: Optional[DiagnosticTopicStatusSchema] = None
     weak_topics: List[DiagnosticTopicStatusSchema] = []
     topics: List[DiagnosticTopicStatusSchema] = []
 
