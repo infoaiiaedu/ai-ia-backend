@@ -191,6 +191,19 @@ def child_login(request, data: ChildLoginSchema = Form(...)):
         "message": f"Child {child.name} logged in successfully."
     }
 
+
+@router.get("/avatars/", response=List[AvatarSchema])
+def avatars_list(request):
+    logos = Logo.objects.all().order_by("id")
+    return [
+        {
+            "id": logo.id,
+            "name": logo.name,
+            "image": logo.image.url if logo.image else "",
+        }
+        for logo in logos
+    ]
+
 @router.get("/parent/children/", response=List[ParentChildSchema], auth=AuthBearer())
 def parent_children(request):
     parent: Parent = request.auth

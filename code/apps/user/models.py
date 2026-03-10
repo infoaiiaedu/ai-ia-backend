@@ -133,13 +133,13 @@ class Parent(models.Model):
 class Logo(models.Model):
     name = models.CharField(max_length=100, verbose_name="ლოგოს სახელი")
     image = models.ImageField(upload_to='logos/', verbose_name="ლოგოს სურათი")
-
+    
     def __str__(self):
         return self.name
     
     class Meta:
-        verbose_name = "ლოგო"
-        verbose_name_plural = "ლოგოები"
+        verbose_name = "ავატარი"
+        verbose_name_plural = "ავატარები"
 
 # ---------------------------
 # Child Model
