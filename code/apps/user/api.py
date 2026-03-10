@@ -390,6 +390,7 @@ def diagnostic_start(
     max_minutes: Optional[int] = Form(None),
 ):
     child: Child = request.auth
+    _update_streak(child)
     if not child.subject:
         raise HttpError(400, "Child has no subject")
 
@@ -462,6 +463,7 @@ def diagnostic_start(
 @router.post("/child/diagnostic/answer/", response=DiagnosticResponseSchema, auth=ChildAuthBearer())
 def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
     child: Child = request.auth
+    _update_streak(child)
     session = get_object_or_404(DiagnosticSession, id=data.session_id, child=child)
     if session.is_complete:
         return _diagnostic_response(session)
