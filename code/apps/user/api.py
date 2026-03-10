@@ -3,13 +3,15 @@ import random
 from ninja import Router, Form
 from typing import List, Optional
 from datetime import date
+from django.db import models
 from django.utils import timezone
 from ninja.errors import HttpError
 from ninja.security import HttpBearer
-from apps.user.models import Parent, Child, Logo, DiagnosticSession
+from apps.user.models import Parent, Child, Logo, DiagnosticSession, XPEvent
 from apps.core.models import Subject, Topic, Question, Answer
 from .schema import TokenSchema, ChildRegisterSchema, OTPResponseSchema, AvatarSchema, ChildLoginSchema
 from .schema import ParentChildSchema, DiagnosticAnswerSchema, DiagnosticResponseSchema
+from .schema import LeaderboardEntrySchema, LeaderboardResponseSchema
 from .utils import decode_jwt_token, decode_child_jwt_token
 from django.shortcuts import get_object_or_404
 
@@ -33,6 +35,40 @@ class ChildAuthBearer(HttpBearer):
         if not valid:
             return None
         return account
+
+
+STREAK_BONUS_MAP = {
+    7: 50,
+    14: 120,
+    21: 200,
+    28: 300,
+}
+
+
+def _award_xp(child: Child, amount: int, source: str, subject: Optional[Subject] = None):
+    if amount <= 0:
+        return
+    XPEvent.objects.create(child=child, subject=subject, amount=amount, source=source)
+    Child.objects.filter(id=child.id).update(xp_total=models.F("xp_total") + amount)
+
+
+def _update_streak(child: Child):
+    today = timezone.localdate()
+    if child.last_active_date == today:
+        return
+
+    yesterday = today - timezone.timedelta(days=1)
+    if child.last_active_date == yesterday:
+        child.streak_count += 1
+    else:
+        child.streak_count = 1
+
+    child.last_active_date = today
+    child.save(update_fields=["streak_count", "last_active_date"])
+
+    bonus = STREAK_BONUS_MAP.get(child.streak_count)
+    if bonus:
+        _award_xp(child, bonus, f"streak_{child.streak_count}", child.subject)
 
 
 # ---------------------------
@@ -185,6 +221,8 @@ def child_login(request, data: ChildLoginSchema = Form(...)):
 
     if update_fields:
         child.save(update_fields=update_fields)
+
+    _update_streak(child)
 
     tokens = child.generate_tokens()
     return {
@@ -459,6 +497,9 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
         if data.text and question.correct_text_answer:
             is_correct = data.text.strip().lower() == question.correct_text_answer.strip().lower()
 
+    if is_correct:
+        _award_xp(child, question.xp or 0, "diagnostic_correct", question.quiz.subject or child.subject)
+
     stats_key = str(topic_id)
     stats = session.topic_stats.get(stats_key, {"asked": 0, "correct": 0})
     stats["asked"] += 1
@@ -567,3 +608,49 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
     ])
 
     return _diagnostic_response(session, next_question, next_topic_id)
+
+
+@router.get("/leaderboard/{int:subject_id}/", response=LeaderboardResponseSchema, auth=ChildAuthBearer())
+def leaderboard(request, subject_id: int, period: str = "weekly"):
+    child: Child = request.auth
+    subject = get_object_or_404(Subject, id=subject_id)
+
+    now = timezone.now()
+    period_key = period.lower()
+    if period_key == "monthly":
+        since = now - timezone.timedelta(days=30)
+    elif period_key == "yearly":
+        since = now - timezone.timedelta(days=365)
+    else:
+        period_key = "weekly"
+        since = now - timezone.timedelta(days=7)
+
+    qs = (
+        XPEvent.objects.filter(subject=subject, created_at__gte=since)
+        .values("child_id", "child__name", "child__nickname", "child__logo__image")
+        .annotate(xp=models.Sum("amount"))
+        .order_by("-xp", "child_id")
+    )
+
+    entries = []
+    me_rank = None
+    for idx, row in enumerate(qs, start=1):
+        if row["child_id"] == child.id:
+            me_rank = idx
+        entries.append(
+            {
+                "rank": idx,
+                "child_id": row["child_id"],
+                "name": row["child__name"],
+                "nickname": row["child__nickname"],
+                "avatar": row["child__logo__image"] or None,
+                "xp": int(row["xp"] or 0),
+            }
+        )
+
+    return {
+        "subject_id": subject.id,
+        "period": period_key,
+        "entries": entries,
+        "me_rank": me_rank,
+    }

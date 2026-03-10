@@ -104,3 +104,19 @@ class DiagnosticResponseSchema(Schema):
 class OTPResponseSchema(Schema):
     message: str
     access_code: Optional[str] = None
+
+
+class LeaderboardEntrySchema(Schema):
+    rank: int
+    child_id: int
+    name: str
+    nickname: Optional[str] = None
+    avatar: Optional[str] = None
+    xp: int
+
+
+class LeaderboardResponseSchema(Schema):
+    subject_id: int
+    period: str
+    entries: List[LeaderboardEntrySchema]
+    me_rank: Optional[int] = None

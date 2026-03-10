@@ -166,6 +166,9 @@ class Child(models.Model):
     date_of_birth = models.DateField(null=True, blank=True, verbose_name="დაბადების თარიღი")
     created = models.DateTimeField(default=timezone.now, verbose_name="შეიქმნა")
     sex = models.CharField(choices=GENDER_CHOICES, null=True, blank=True, verbose_name="სქესი")
+    xp_total = models.PositiveIntegerField(default=0, verbose_name="სულ XP")
+    streak_count = models.PositiveIntegerField(default=0, verbose_name="სტრიქი")
+    last_active_date = models.DateField(null=True, blank=True, verbose_name="ბოლო აქტივობის დღე")
 
     access_code = models.CharField(max_length=10, unique=True, blank=True, null=True)
 
@@ -232,6 +235,17 @@ class DiagnosticSession(models.Model):
 
     def __str__(self):
         return f"DiagnosticSession(child_id={self.child_id}, subject_id={self.subject_id})"
+
+
+class XPEvent(models.Model):
+    child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name="xp_events")
+    subject = models.ForeignKey(Subject, on_delete=models.SET_NULL, null=True, blank=True, related_name="xp_events")
+    amount = models.IntegerField(verbose_name="XP რაოდენობა")
+    source = models.CharField(max_length=50, verbose_name="წყარო")
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="თარიღი")
+
+    def __str__(self):
+        return f"XPEvent(child_id={self.child_id}, amount={self.amount}, source={self.source})"
 
 
 # ---------------------------
