@@ -16,7 +16,7 @@ from .schema import ChildProfileSchema
 from .utils import decode_jwt_token, decode_child_jwt_token
 from django.shortcuts import get_object_or_404
 
-router = Router()
+router = Router(tags=["User"])
 
 
 # ---------------------------

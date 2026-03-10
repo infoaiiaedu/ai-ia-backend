@@ -27,7 +27,7 @@ from .schema import (
     ParentSubjectSchema,
 )
 
-router = Router()
+router = Router(tags=["Core"])
 
 
 @router.get("/child/subjects/", response=List[SubjectSchema])

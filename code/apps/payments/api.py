@@ -16,7 +16,7 @@ from .models import Order, Subscription
 from .schema import CreateOrderRequest, BOGCallbackPayload
 from .bog_client import BOGClient
 
-router = Router()
+router = Router(tags=["Payments"])
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
