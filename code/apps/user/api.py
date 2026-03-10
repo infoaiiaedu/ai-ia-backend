@@ -12,6 +12,7 @@ from apps.core.models import Subject, Topic, Question, Answer
 from .schema import TokenSchema, ChildRegisterSchema, OTPResponseSchema, AvatarSchema, ChildLoginSchema
 from .schema import ParentChildSchema, DiagnosticAnswerSchema, DiagnosticResponseSchema
 from .schema import LeaderboardEntrySchema, LeaderboardResponseSchema
+from .schema import ChildProfileSchema
 from .utils import decode_jwt_token, decode_child_jwt_token
 from django.shortcuts import get_object_or_404
 
@@ -69,6 +70,38 @@ def _update_streak(child: Child):
     bonus = STREAK_BONUS_MAP.get(child.streak_count)
     if bonus:
         _award_xp(child, bonus, f"streak_{child.streak_count}", child.subject)
+
+
+def _build_profile_progress(child: Child) -> dict:
+    completed_sessions = list(
+        DiagnosticSession.objects.filter(child=child, is_complete=True).only("topic_outcomes")
+    )
+    tests_completed = len(completed_sessions)
+    tests_attempted = DiagnosticSession.objects.filter(child=child).count()
+
+    tests_passed = 0
+    for session in completed_sessions:
+        outcomes = session.topic_outcomes or {}
+        known = sum(1 for status in outcomes.values() if status == "known")
+        weak = sum(1 for status in outcomes.values() if status == "weak")
+        if (known + weak) > 0 and known >= weak:
+            tests_passed += 1
+
+    tests_failed = tests_completed - tests_passed
+    quizzes_completed = 0
+    quizzes_passed = 0
+    quizzes_failed = 0
+    total_attempts = quizzes_completed + tests_attempted
+
+    return {
+        "quizzes_completed": quizzes_completed,
+        "quizzes_passed": quizzes_passed,
+        "quizzes_failed": quizzes_failed,
+        "tests_completed": tests_completed,
+        "tests_passed": tests_passed,
+        "tests_failed": tests_failed,
+        "total_attempts": total_attempts,
+    }
 
 
 # ---------------------------
@@ -277,6 +310,34 @@ def parent_children(request):
         )
 
     return result
+
+
+@router.get("/child/profile/", response=ChildProfileSchema, auth=ChildAuthBearer())
+def child_profile(request):
+    child: Child = request.auth
+
+    item_bought = None
+    if child.subject:
+        item_bought = {"id": child.subject.id, "name": child.subject.name}
+
+    avatar = None
+    if child.logo:
+        image_url = child.logo.image.url if child.logo.image else ""
+        avatar = {"id": child.logo.id, "name": child.logo.name, "image": image_url}
+
+    progress = _build_profile_progress(child)
+
+    return {
+        "child_id": child.id,
+        "full_name": child.name,
+        "child_class": child.grade,
+        "item_bought": item_bought,
+        "nickname": child.nickname,
+        "avatar": avatar,
+        "streak_days": child.streak_count,
+        "xp_count": child.xp_total,
+        "progress": progress,
+    }
 
 
 def _topics_with_questions(subject: Subject) -> List[int]:

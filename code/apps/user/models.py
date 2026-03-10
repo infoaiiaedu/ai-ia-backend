@@ -246,6 +246,10 @@ class XPEvent(models.Model):
 
     def __str__(self):
         return f"XPEvent(child_id={self.child_id}, amount={self.amount}, source={self.source})"
+    
+    class Meta:
+        verbose_name = "XP ჩანაწერები"
+        verbose_name_plural = "XP ჩანაწერები"
 
 
 # ---------------------------

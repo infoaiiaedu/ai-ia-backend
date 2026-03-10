@@ -120,3 +120,25 @@ class LeaderboardResponseSchema(Schema):
     period: str
     entries: List[LeaderboardEntrySchema]
     me_rank: Optional[int] = None
+
+
+class ProgressSchema(Schema):
+    quizzes_completed: int
+    quizzes_passed: int
+    quizzes_failed: int
+    tests_completed: int
+    tests_passed: int
+    tests_failed: int
+    total_attempts: int
+
+
+class ChildProfileSchema(Schema):
+    child_id: int
+    full_name: str
+    child_class: int
+    item_bought: Optional[SubjectMiniSchema] = None
+    nickname: Optional[str] = None
+    avatar: Optional[AvatarSchema] = None
+    streak_days: int
+    xp_count: int
+    progress: ProgressSchema
