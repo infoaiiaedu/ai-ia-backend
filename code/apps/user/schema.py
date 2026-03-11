@@ -142,3 +142,4 @@ class ChildProfileSchema(Schema):
     streak_days: int
     xp_count: int
     progress: ProgressSchema
+    weekly_activity: List[bool]
