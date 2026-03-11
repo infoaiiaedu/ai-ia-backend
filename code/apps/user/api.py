@@ -6,7 +6,15 @@ from datetime import date
 from django.db import models
 from django.utils import timezone
 from ninja.errors import HttpError
-from apps.user.models import Parent, Child, Logo, DiagnosticSession, XPEvent
+from apps.user.models import (
+    Parent,
+    Child,
+    Logo,
+    DiagnosticSession,
+    XPEvent,
+    ParentRefreshToken,
+    ChildRefreshToken,
+)
 from apps.core.models import Subject, Topic, Question, Answer
 from .schema import TokenSchema, ChildRegisterSchema, OTPResponseSchema, AvatarSchema, ChildLoginSchema
 from .schema import ParentChildSchema, DiagnosticAnswerSchema, DiagnosticResponseSchema
@@ -122,6 +130,13 @@ def parent_verify_otp(
     raise HttpError(400, "Invalid or expired OTP")
 
 
+@router.post("/parent/logout/", auth=AuthBearer())
+def parent_logout(request):
+    parent: Parent = request.auth
+    ParentRefreshToken.objects.filter(parent=parent).delete()
+    return {"message": "Parent logged out"}
+
+
 @router.post("/child/register/", response=OTPResponseSchema, auth=AuthBearer())
 def child_register(request, data: ChildRegisterSchema):
     parent: Parent = request.auth
@@ -187,6 +202,13 @@ def child_login(request, data: ChildLoginSchema = Form(...)):
         "refresh_token": tokens["refresh_token"],
         "message": f"Child {child.name} logged in successfully."
     }
+
+
+@router.post("/child/logout/", auth=ChildAuthBearer())
+def child_logout(request):
+    child: Child = request.auth
+    ChildRefreshToken.objects.filter(child=child).delete()
+    return {"message": "Child logged out"}
 
 
 @router.get("/avatars/", response=List[AvatarSchema])
