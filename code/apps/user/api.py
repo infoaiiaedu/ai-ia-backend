@@ -17,7 +17,7 @@ from apps.user.models import (
 )
 from apps.core.models import Subject, Topic, Question, Answer
 from .schema import TokenSchema, ChildRegisterSchema, OTPResponseSchema, AvatarSchema, ChildLoginSchema
-from .schema import ParentChildSchema, DiagnosticAnswerSchema, DiagnosticResponseSchema
+from .schema import ParentChildSchema, ParentProfileSchema, DiagnosticAnswerSchema, DiagnosticResponseSchema
 from .schema import LeaderboardEntrySchema, LeaderboardResponseSchema
 from .schema import ChildProfileSchema
 from .api_utils import (
@@ -256,6 +256,30 @@ def parent_children(request):
         )
 
     return result
+
+
+@router.get("/parent/profile/", response=ParentProfileSchema, auth=AuthBearer())
+def parent_profile(request):
+    parent: Parent = request.auth
+    children = Child.objects.filter(parent=parent).select_related("subject")
+    bought_subjects = []
+
+    for child in children:
+        subject = None
+        if child.subject:
+            subject = {"id": child.subject.id, "name": child.subject.name}
+        bought_subjects.append(
+            {
+                "child_id": child.id,
+                "child_name": child.name,
+                "subject": subject,
+            }
+        )
+
+    return {
+        "name": parent.name,
+        "bought_subjects": bought_subjects,
+    }
 
 
 @router.get("/child/profile/", response=ChildProfileSchema, auth=ChildAuthBearer())

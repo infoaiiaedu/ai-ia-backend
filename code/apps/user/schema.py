@@ -62,6 +62,17 @@ class ParentChildSchema(Schema):
     access_code: Optional[str] = None
 
 
+class ParentBoughtSubjectSchema(Schema):
+    child_id: int
+    child_name: str
+    subject: Optional[SubjectMiniSchema] = None
+
+
+class ParentProfileSchema(Schema):
+    name: str
+    bought_subjects: List[ParentBoughtSubjectSchema] = []
+
+
 class DiagnosticAnswerOptionSchema(Schema):
     id: int
     text: str
