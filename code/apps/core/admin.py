@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 import logging
 
 from .forms import TopicForm, SubjectForm
-from .models import Subject, Grade, Topic, Quiz, Question, Answer
+from .models import Subject, Grade, Topic, Quiz, Question, Answer, QuizImport
 
 
 logger = logging.getLogger(__name__)
@@ -140,6 +140,24 @@ class QuizAdmin(admin.ModelAdmin):
 
     class Media:
         js = ('admin/js/question_type_toggle.js',)
+
+
+@admin.register(QuizImport)
+class QuizImportAdmin(admin.ModelAdmin):
+    list_display = ('name', 'json_file', 'status', 'processed_at', 'created_at')
+    list_filter = ('status', 'subject', 'grade', 'target_quiz')
+    search_fields = ('name', 'json_file')
+    autocomplete_fields = ('subject', 'grade', 'topics', 'target_quiz')
+    filter_horizontal = ('topics',)
+    readonly_fields = ('status', 'last_error', 'processed_at', 'created_at')
+    fieldsets = (
+        ('Import', {
+            'fields': ('name', 'json_file', 'target_quiz', 'level', 'subject', 'grade', 'topics')
+        }),
+        ('Status', {
+            'fields': ('status', 'last_error', 'processed_at', 'created_at')
+        }),
+    )
 
 
 @admin.register(Question)

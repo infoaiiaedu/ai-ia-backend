@@ -76,9 +76,91 @@ class Topic(models.Model):
         ordering = ['order']
 
 
+class QuizImport(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_PROCESSING = "processing"
+    STATUS_DONE = "done"
+    STATUS_ERROR = "error"
+
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "Pending"),
+        (STATUS_PROCESSING, "Processing"),
+        (STATUS_DONE, "Done"),
+        (STATUS_ERROR, "Error"),
+    )
+
+    name = models.CharField(max_length=255, blank=True, null=True, verbose_name="სახელი")
+    json_file = models.FileField(
+        upload_to="quiz_imports/",
+        verbose_name="JSON",
+        help_text="JSON with quizzes or a list of questions. See docs for schema.",
+    )
+
+    target_quiz = models.ForeignKey(
+        "Quiz",
+        on_delete=models.SET_NULL,
+        related_name="imports",
+        null=True,
+        blank=True,
+        verbose_name="ქვიზი",
+    )
+    level = models.PositiveSmallIntegerField(default=1, verbose_name="დონე")
+
+    subject = models.ForeignKey(
+        Subject,
+        on_delete=models.SET_NULL,
+        related_name="quiz_imports",
+        null=True,
+        blank=True,
+        verbose_name="საგანი",
+    )
+    grade = models.ForeignKey(
+        Grade,
+        on_delete=models.SET_NULL,
+        related_name="quiz_imports",
+        null=True,
+        blank=True,
+        verbose_name="კლასი",
+    )
+    topics = models.ManyToManyField(
+        Topic,
+        related_name="quiz_imports",
+        blank=True,
+        verbose_name="თემები",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        verbose_name="სტატუსი",
+    )
+    last_error = models.TextField(blank=True, null=True, verbose_name="ბოლო შეცდომა")
+    processed_at = models.DateTimeField(blank=True, null=True, verbose_name="დამუშავების დრო")
+    created_at = models.DateTimeField(default=timezone.now, verbose_name="შექმნის თარიღი")
+
+    def __str__(self):
+        if self.name:
+            return self.name
+        return f"Import {self.pk or ''}".strip()
+
+    class Meta:
+        verbose_name = "ქვიზის იმპორტი"
+        verbose_name_plural = "ქვიზების იმპორტი"
+
+
 class Quiz(models.Model):
     title = models.CharField(max_length=255, verbose_name="ქვიზის სახელი")
     description = models.TextField(blank=True, null=True, verbose_name="აღწერა")
+
+    source_import = models.ForeignKey(
+        "QuizImport",
+        on_delete=models.SET_NULL,
+        related_name="quizzes",
+        null=True,
+        blank=True,
+        verbose_name="იმპორტის წყარო",
+    )
     
     subject = models.ForeignKey(
         Subject, 
