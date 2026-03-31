@@ -33,8 +33,8 @@ def load_json_payload(quiz_import: QuizImport) -> Dict[str, Any]:
             data = json.load(raw)
     except Exception as exc:
         raise QuizImportError(f"Failed to read JSON: {exc}") from exc
-    if not isinstance(data, (dict, list)):
-        raise QuizImportError("JSON root must be an object or a list of questions.")
+    if not isinstance(data, dict):
+        raise QuizImportError("JSON root must be an object with a 'quizzes' array.")
     return data
 
 

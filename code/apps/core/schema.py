@@ -112,6 +112,28 @@ class PublicQuizSchema(Schema):
     questions: List[PublicQuestionSchema] = []
 
 
+class TopicProfileSchema(Schema):
+    id: int
+    name: str
+
+
+class ActivitySnapshotSchema(Schema):
+    days_active_7d: int
+    study_minutes_7d: int
+    tests_completed_30d: int
+    avg_accuracy: float
+    consistency_band: str
+
+
+class StudentContextSchema(Schema):
+    boundary_topic: Optional[TopicProfileSchema] = None
+    weak_topics: List[TopicProfileSchema] = []
+    strong_topics: List[TopicProfileSchema] = []
+    prerequisite_gaps: List[TopicProfileSchema] = []
+    support_level: str
+    activity: ActivitySnapshotSchema
+
+
 class AnswerSubmission(Schema):
     """User's answer submission - can be answer_id or text"""
     question_id: int
