@@ -3,11 +3,11 @@ from ninja import Router
 from typing import List, Optional
 from django.shortcuts import get_object_or_404
 from django.db.models import Count
+from ninja.errors import HttpError
 
 
 # Authentication temporarily commented out
-# from apps.user.utils import decode_jwt_token
-# from ninja.security import HttpBearer
+from apps.user.api_utils import ChildAuthBearer, _award_xp, _update_streak
 
 from .models import Subject, Grade, Topic, Quiz, Question, Answer
 from .schema import (
@@ -28,6 +28,28 @@ from .schema import (
 )
 
 router = Router(tags=["Core"])
+
+
+def _get_child_or_none(request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return None
+
+    parts = auth_header.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+
+    return ChildAuthBearer().authenticate(request, parts[1])
+
+
+FREE_TOPIC_LIMIT = 3
+
+
+def _get_free_topic_ids():
+    """First 3 topics by order — the ones guests can access quizzes for."""
+    return list(
+        Topic.objects.order_by("order", "id").values_list("id", flat=True)[:FREE_TOPIC_LIMIT]
+    )
 
 
 @router.get("/child/subjects/", response=List[SubjectSchema])
@@ -80,21 +102,26 @@ def list_grades(request):
 
 
 @router.get("/topics/", response=List[TopicSchema])
-
-def get_topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] = None, subject_id: Optional[int] = None):
+def get_topics(
+    request,
+    topic_id: Optional[int] = None,
+    grade_id: Optional[int] = None,
+    subject_id: Optional[int] = None,
+):
     """Get topics with optional filtering by topic_id, grade_id, or subject_id"""
-    topics = Topic.objects.select_related('subject', 'grade')
-    
+    topics = Topic.objects.select_related("subject", "grade")
+
     if topic_id is not None:
         topics = topics.filter(id=topic_id)
-    
+
     if grade_id is not None:
         topics = topics.filter(grade_id=grade_id)
-    
+
     if subject_id is not None:
         topics = topics.filter(subject_id=subject_id)
-    
-    return list(topics.order_by('order'))
+
+    # Guests see ALL topics (no filtering)
+    return list(topics.order_by("order", "id"))
 
 def _serialize_quiz(quiz: Quiz):
     questions = []
@@ -133,7 +160,13 @@ def _serialize_quiz(quiz: Quiz):
 
 @router.get("/quizzes/", response=List[PublicQuizSchema])
 def list_quizzes(request):
-    qs = Quiz.objects.filter(is_active=True).prefetch_related('questions__answers').order_by('-created_at')
+    qs = Quiz.objects.filter(is_active=True)
+    child = _get_child_or_none(request)
+    if child is None:
+        # Guest: only quizzes connected to the first 3 topics
+        qs = qs.filter(topics__in=_get_free_topic_ids())
+
+    qs = qs.prefetch_related("questions__answers", "topics").order_by("-created_at").distinct()
     # serialize without exposing correct answers
     result = []
     for q in qs:
@@ -170,8 +203,9 @@ def list_quizzes(request):
     return result
 
 
-@router.post("/quizzes/submit/", response=QuizSubmissionResult)
+@router.post("/quizzes/submit/", response=QuizSubmissionResult, auth=ChildAuthBearer())
 def submit_quiz(request, payload: QuizSubmission):
+    child = request.auth
     quiz = get_object_or_404(Quiz, id=payload.quiz_id)
     results = []
     total_xp = 0
@@ -203,7 +237,12 @@ def submit_quiz(request, payload: QuizSubmission):
             'explanation': question.explanation,
             'xp': xp,
         })
-    
+
+    # Save XP for the authenticated child
+    if total_xp > 0:
+        _award_xp(child, total_xp, f"quiz_{quiz.id}", quiz.subject)
+        _update_streak(child)
+
     return {
         'total_xp': total_xp,
         'correct_count': correct_count,
@@ -214,7 +253,12 @@ def submit_quiz(request, payload: QuizSubmission):
 
 @router.get("/quizzes/{quiz_id}/", response=PublicQuizSchema)
 def get_quiz(request, quiz_id: int):
-    quiz = get_object_or_404(Quiz.objects.prefetch_related('questions__answers'), id=quiz_id)
+    quiz = get_object_or_404(Quiz.objects.prefetch_related("questions__answers", "topics"), id=quiz_id)
+    child = _get_child_or_none(request)
+    if child is None:
+        # Guest: only quizzes linked to the first 3 topics are accessible
+        if not quiz.topics.filter(id__in=_get_free_topic_ids()).exists():
+            raise HttpError(403, "Quiz access requires child authentication")
     questions = []
     for q in quiz.questions.all().order_by('order'):
         answers = [
