@@ -80,6 +80,7 @@ def list_grades(request):
 
 
 @router.get("/topics/", response=List[TopicSchema])
+
 def get_topics(request, topic_id: Optional[int] = None, grade_id: Optional[int] = None, subject_id: Optional[int] = None):
     """Get topics with optional filtering by topic_id, grade_id, or subject_id"""
     topics = Topic.objects.select_related('subject', 'grade')
