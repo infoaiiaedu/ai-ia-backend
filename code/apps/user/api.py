@@ -549,18 +549,19 @@ def leaderboard(request, subject_id: int, period: str = "weekly"):
     child: Child = request.auth
     subject = get_object_or_404(Subject, id=subject_id)
 
-    now = timezone.now()
     period_key = period.lower()
-    if period_key == "monthly":
-        since = now - timezone.timedelta(days=30)
+    today = timezone.localdate()
+    if period_key == "weekly":
+        since_date = today - timezone.timedelta(days=today.weekday())
+    elif period_key == "monthly":
+        since_date = today.replace(day=1)
     elif period_key == "yearly":
-        since = now - timezone.timedelta(days=365)
+        since_date = today.replace(month=1, day=1)
     else:
-        period_key = "weekly"
-        since = now - timezone.timedelta(days=7)
+        raise HttpError(400, "Invalid period. Use weekly, monthly, or yearly.")
 
     qs = (
-        XPEvent.objects.filter(subject=subject, created_at__gte=since)
+        XPEvent.objects.filter(subject=subject, created_at__date__gte=since_date)
         .values("child_id", "child__name", "child__nickname", "child__logo__image")
         .annotate(xp=models.Sum("amount"))
         .order_by("-xp", "child_id")
