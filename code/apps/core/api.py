@@ -203,9 +203,9 @@ def list_quizzes(request):
     return result
 
 
-@router.post("/quizzes/submit/", response=QuizSubmissionResult, auth=ChildAuthBearer())
+@router.post("/quizzes/submit/", response=QuizSubmissionResult)
 def submit_quiz(request, payload: QuizSubmission):
-    child = request.auth
+    child = _get_child_or_none(request)
     quiz = get_object_or_404(Quiz, id=payload.quiz_id)
     results = []
     total_xp = 0
@@ -238,8 +238,8 @@ def submit_quiz(request, payload: QuizSubmission):
             'xp': xp,
         })
 
-    # Save XP for the authenticated child
-    if total_xp > 0:
+    # Save XP only for authenticated children
+    if child is not None and total_xp > 0:
         _award_xp(child, total_xp, f"quiz_{quiz.id}", quiz.subject)
         _update_streak(child)
 
@@ -256,7 +256,6 @@ def get_quiz(request, quiz_id: int):
     quiz = get_object_or_404(Quiz.objects.prefetch_related("questions__answers", "topics"), id=quiz_id)
     child = _get_child_or_none(request)
     if child is None:
-        # Guest: only quizzes linked to the first 3 topics are accessible
         if not quiz.topics.filter(id__in=_get_free_topic_ids()).exists():
             raise HttpError(403, "Quiz access requires child authentication")
     questions = []
