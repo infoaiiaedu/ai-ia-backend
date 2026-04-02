@@ -19,6 +19,7 @@ TWILIO_PHONE_NUMBER = "+13167105763"  # Your Twilio virtual number
 
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
+
 # ---------------------------
 # User Model
 # ---------------------------
@@ -26,13 +27,22 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
+
 # ---------------------------
 # Parent Model
 # ---------------------------
 class Parent(models.Model):
     name = models.CharField(max_length=100, verbose_name="სახელი და გვარი")
-    email = models.EmailField(unique=True, null=True, blank=True, verbose_name="ელ-ფოსტა")
-    mobile_phone = models.CharField(max_length=20, unique=True, null=True, blank=True, verbose_name="მობილურის ნომერი")
+    email = models.EmailField(
+        unique=True, null=True, blank=True, verbose_name="ელ-ფოსტა"
+    )
+    mobile_phone = models.CharField(
+        max_length=20,
+        unique=True,
+        null=True,
+        blank=True,
+        verbose_name="მობილურის ნომერი",
+    )
     created = models.DateTimeField(default=timezone.now, verbose_name="შეიქმნა")
     is_active = models.BooleanField(default=False, verbose_name="აქტიური")
     is_verified = models.BooleanField(default=False, verbose_name="ვერიფიცირებული")
@@ -59,13 +69,17 @@ class Parent(models.Model):
             "iat": datetime.utcnow(),
         }
 
-        access_token = jwt.encode(access_payload, settings.SECRET_KEY, algorithm="HS256")
-        refresh_token = jwt.encode(refresh_payload, settings.SECRET_KEY, algorithm="HS256")
+        access_token = jwt.encode(
+            access_payload, settings.SECRET_KEY, algorithm="HS256"
+        )
+        refresh_token = jwt.encode(
+            refresh_payload, settings.SECRET_KEY, algorithm="HS256"
+        )
 
         ParentRefreshToken.objects.create(
             parent=self,
             token=refresh_token,
-            expires_at=datetime.utcnow() + timedelta(days=365)
+            expires_at=datetime.utcnow() + timedelta(days=365),
         )
 
         return {"access_token": access_token, "refresh_token": refresh_token}
@@ -90,7 +104,7 @@ class Parent(models.Model):
             message = twilio_client.messages.create(
                 body=f"თქვენი კოდია {self.otp_code}",
                 from_=TWILIO_PHONE_NUMBER,
-                to=self.mobile_phone
+                to=self.mobile_phone,
             )
             return {"success": True, "sid": message.sid}
         except Exception as e:
@@ -102,7 +116,9 @@ class Parent(models.Model):
         if not self.otp_code or self.otp_expiry < timezone.now():
             self.generate_otp()
 
-        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None) or "no-reply@localhost"
+        from_email = (
+            getattr(settings, "DEFAULT_FROM_EMAIL", None) or "no-reply@localhost"
+        )
         try:
             send_mail(
                 subject="თქვენი ერთჯერადი კოდი",
@@ -116,7 +132,11 @@ class Parent(models.Model):
             return {"success": False, "error": str(e)}
 
     def verify_otp(self, code: str) -> bool:
-        if self.otp_code == code and self.otp_expiry and self.otp_expiry >= timezone.now():
+        if (
+            self.otp_code == code
+            and self.otp_expiry
+            and self.otp_expiry >= timezone.now()
+        ):
             self.otp_code = None
             self.otp_expiry = None
             self.save(update_fields=["otp_code", "otp_expiry"])
@@ -130,27 +150,34 @@ class Parent(models.Model):
         verbose_name = "მშობელი"
         verbose_name_plural = "მშობლები"
 
+
 class Logo(models.Model):
     name = models.CharField(max_length=100, verbose_name="ლოგოს სახელი")
-    image = models.ImageField(upload_to='logos/', verbose_name="ლოგოს სურათი")
-    
+    image = models.ImageField(upload_to="logos/", verbose_name="ლოგოს სურათი")
+
     def __str__(self):
         return self.name
-    
+
     class Meta:
         verbose_name = "ავატარი"
         verbose_name_plural = "ავატარები"
+
 
 # ---------------------------
 # Child Model
 # ---------------------------
 class Child(models.Model):
     GENDER_CHOICES = (
-        ('male', 'ბიჭი'),
-        ('female', 'გოგო'),
+        ("male", "ბიჭი"),
+        ("female", "გოგო"),
     )
 
-    parent = models.ForeignKey(Parent, on_delete=models.CASCADE, related_name='children', verbose_name="მშობელი")
+    parent = models.ForeignKey(
+        Parent,
+        on_delete=models.CASCADE,
+        related_name="children",
+        verbose_name="მშობელი",
+    )
     name = models.CharField(max_length=100, verbose_name="სახელი და გვარი")
     grade = models.PositiveIntegerField("კლასი")
     subject = models.ForeignKey(
@@ -161,14 +188,24 @@ class Child(models.Model):
         related_name="children",
         verbose_name="საგანი",
     )
-    nickname = models.CharField(max_length=100, null=True, blank=True, verbose_name="ნიქნეიმი")
-    logo = models.ForeignKey(Logo, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="ლოგო")
-    date_of_birth = models.DateField(null=True, blank=True, verbose_name="დაბადების თარიღი")
+    nickname = models.CharField(
+        max_length=100, null=True, blank=True, verbose_name="ნიქნეიმი"
+    )
+    logo = models.ForeignKey(
+        Logo, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="ლოგო"
+    )
+    date_of_birth = models.DateField(
+        null=True, blank=True, verbose_name="დაბადების თარიღი"
+    )
     created = models.DateTimeField(default=timezone.now, verbose_name="შეიქმნა")
-    sex = models.CharField(choices=GENDER_CHOICES, null=True, blank=True, verbose_name="სქესი")
+    sex = models.CharField(
+        choices=GENDER_CHOICES, null=True, blank=True, verbose_name="სქესი"
+    )
     xp_total = models.PositiveIntegerField(default=0, verbose_name="სულ XP")
     streak_count = models.PositiveIntegerField(default=0, verbose_name="სტრიქი")
-    last_active_date = models.DateField(null=True, blank=True, verbose_name="ბოლო აქტივობის დღე")
+    last_active_date = models.DateField(
+        null=True, blank=True, verbose_name="ბოლო აქტივობის დღე"
+    )
 
     access_code = models.CharField(max_length=10, unique=True, blank=True, null=True)
 
@@ -192,13 +229,17 @@ class Child(models.Model):
             "iat": datetime.utcnow(),
         }
 
-        access_token = jwt.encode(access_payload, settings.SECRET_KEY, algorithm="HS256")
-        refresh_token = jwt.encode(refresh_payload, settings.SECRET_KEY, algorithm="HS256")
+        access_token = jwt.encode(
+            access_payload, settings.SECRET_KEY, algorithm="HS256"
+        )
+        refresh_token = jwt.encode(
+            refresh_payload, settings.SECRET_KEY, algorithm="HS256"
+        )
 
         ChildRefreshToken.objects.create(
             child=self,
             token=refresh_token,
-            expires_at=datetime.utcnow() + timedelta(days=365)
+            expires_at=datetime.utcnow() + timedelta(days=365),
         )
 
         return {"access_token": access_token, "refresh_token": refresh_token}
@@ -212,8 +253,12 @@ class Child(models.Model):
 
 
 class DiagnosticSession(models.Model):
-    child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name="diagnostic_sessions")
-    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name="diagnostic_sessions")
+    child = models.ForeignKey(
+        Child, on_delete=models.CASCADE, related_name="diagnostic_sessions"
+    )
+    subject = models.ForeignKey(
+        Subject, on_delete=models.CASCADE, related_name="diagnostic_sessions"
+    )
     topics = models.JSONField(default=list)
     low_index = models.IntegerField(default=0)
     high_index = models.IntegerField(default=0)
@@ -234,19 +279,27 @@ class DiagnosticSession(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
-        return f"DiagnosticSession(child_id={self.child_id}, subject_id={self.subject_id})"
+        return (
+            f"DiagnosticSession(child_id={self.child_id}, subject_id={self.subject_id})"
+        )
 
 
 class XPEvent(models.Model):
     child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name="xp_events")
-    subject = models.ForeignKey(Subject, on_delete=models.SET_NULL, null=True, blank=True, related_name="xp_events")
+    subject = models.ForeignKey(
+        Subject,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="xp_events",
+    )
     amount = models.IntegerField(verbose_name="XP რაოდენობა")
     source = models.CharField(max_length=50, verbose_name="წყარო")
     created_at = models.DateTimeField(default=timezone.now, verbose_name="თარიღი")
 
     def __str__(self):
         return f"XPEvent(child_id={self.child_id}, amount={self.amount}, source={self.source})"
-    
+
     class Meta:
         verbose_name = "XP ჩანაწერები"
         verbose_name_plural = "XP ჩანაწერები"
@@ -256,7 +309,9 @@ class XPEvent(models.Model):
 # Refresh Token Models
 # ---------------------------
 class ParentRefreshToken(models.Model):
-    parent = models.ForeignKey(Parent, on_delete=models.CASCADE, related_name="refresh_tokens")
+    parent = models.ForeignKey(
+        Parent, on_delete=models.CASCADE, related_name="refresh_tokens"
+    )
     token = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
@@ -269,7 +324,9 @@ class ParentRefreshToken(models.Model):
 
 
 class ChildRefreshToken(models.Model):
-    child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name="refresh_tokens")
+    child = models.ForeignKey(
+        Child, on_delete=models.CASCADE, related_name="refresh_tokens"
+    )
     token = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()

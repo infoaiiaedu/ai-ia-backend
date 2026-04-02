@@ -1,4 +1,3 @@
-# apps/core/router.py
 from ninja import Router
 from typing import List, Optional
 from django.shortcuts import get_object_or_404
@@ -6,7 +5,6 @@ from django.db.models import Count
 from ninja.errors import HttpError
 
 
-# Authentication temporarily commented out
 from apps.user.api_utils import ChildAuthBearer, _award_xp, _update_streak
 
 from .models import Subject, Grade, Topic, Quiz, Question, Answer
@@ -48,7 +46,9 @@ FREE_TOPIC_LIMIT = 3
 def _get_free_topic_ids():
     """First 3 topics by order — the ones guests can access quizzes for."""
     return list(
-        Topic.objects.order_by("order", "id").values_list("id", flat=True)[:FREE_TOPIC_LIMIT]
+        Topic.objects.order_by("order", "id").values_list("id", flat=True)[
+            :FREE_TOPIC_LIMIT
+        ]
     )
 
 
@@ -58,8 +58,8 @@ def list_subjects(request, grade_id: Optional[int] = None):
     if grade_id is not None:
         subjects = subjects.filter(topics__grade_id=grade_id)
     subjects = subjects.annotate(
-        topics_count=Count('topics', distinct=True),
-        quizzes_count=Count('quizzes', distinct=True)
+        topics_count=Count("topics", distinct=True),
+        quizzes_count=Count("quizzes", distinct=True),
     )
     return subjects.distinct()
 
@@ -77,7 +77,9 @@ def list_parent_subjects(request, grade_id: Optional[int] = None):
             "short_description": subject.short_description,
             "icon": subject.icon,
             "cover_image": subject.cover_image,
-            "topics": list(subject.topics.order_by("order").values_list("name", flat=True)),
+            "topics": list(
+                subject.topics.order_by("order").values_list("name", flat=True)
+            ),
         }
         for subject in subjects
     ]
@@ -87,18 +89,16 @@ def list_parent_subjects(request, grade_id: Optional[int] = None):
 def get_subject(request, subject_id: int):
     return get_object_or_404(
         Subject.objects.annotate(
-            topics_count=Count('topics', distinct=True),
-            quizzes_count=Count('quizzes', distinct=True)
+            topics_count=Count("topics", distinct=True),
+            quizzes_count=Count("quizzes", distinct=True),
         ),
-        id=subject_id
+        id=subject_id,
     )
 
 
 @router.get("/grades/", response=List[GradeSchema])
 def list_grades(request):
-    return Grade.objects.annotate(
-        quizzes_count=Count('quizzes', distinct=True)
-    )
+    return Grade.objects.annotate(quizzes_count=Count("quizzes", distinct=True))
 
 
 @router.get("/topics/", response=List[TopicSchema])
@@ -120,41 +120,43 @@ def get_topics(
     if subject_id is not None:
         topics = topics.filter(subject_id=subject_id)
 
-    # Guests see ALL topics (no filtering)
     return list(topics.order_by("order", "id"))
+
 
 def _serialize_quiz(quiz: Quiz):
     questions = []
-    for q in quiz.questions.all().order_by('order'):
+    for q in quiz.questions.all().order_by("order"):
         answers = [
             {
-                'id': a.id,
-                'text': a.text,
-                'is_correct': a.is_correct,
-                'order': a.order,
+                "id": a.id,
+                "text": a.text,
+                "is_correct": a.is_correct,
+                "order": a.order,
             }
-            for a in q.answers.all().order_by('order')
+            for a in q.answers.all().order_by("order")
         ]
-        questions.append({
-            'id': q.id,
-            'text': q.text,
-            'question_type': q.question_type,
-            'level': q.level,
-            'order': q.order,
-            'xp': q.xp,
-            'correct_text_answer': q.correct_text_answer,
-            'explanation': q.explanation,
-            'answers': answers,
-        })
+        questions.append(
+            {
+                "id": q.id,
+                "text": q.text,
+                "question_type": q.question_type,
+                "level": q.level,
+                "order": q.order,
+                "xp": q.xp,
+                "correct_text_answer": q.correct_text_answer,
+                "explanation": q.explanation,
+                "answers": answers,
+            }
+        )
 
     return {
-        'id': quiz.id,
-        'title': quiz.title,
-        'description': quiz.description,
-        'is_active': quiz.is_active,
-        'created_at': quiz.created_at,
-        'updated_at': quiz.updated_at,
-        'questions': questions,
+        "id": quiz.id,
+        "title": quiz.title,
+        "description": quiz.description,
+        "is_active": quiz.is_active,
+        "created_at": quiz.created_at,
+        "updated_at": quiz.updated_at,
+        "questions": questions,
     }
 
 
@@ -163,43 +165,49 @@ def list_quizzes(request):
     qs = Quiz.objects.filter(is_active=True)
     child = _get_child_or_none(request)
     if child is None:
-        # Guest: only quizzes connected to the first 3 topics
         qs = qs.filter(topics__in=_get_free_topic_ids())
 
-    qs = qs.prefetch_related("questions__answers", "topics").order_by("-created_at").distinct()
-    # serialize without exposing correct answers
+    qs = (
+        qs.prefetch_related("questions__answers", "topics")
+        .order_by("-created_at")
+        .distinct()
+    )
     result = []
     for q in qs:
         questions = []
-        for qq in q.questions.all().order_by('order'):
+        for qq in q.questions.all().order_by("order"):
             answers = [
                 {
-                    'id': a.id,
-                    'text': a.text,
-                    'order': a.order,
+                    "id": a.id,
+                    "text": a.text,
+                    "order": a.order,
                 }
-                for a in qq.answers.all().order_by('order')
+                for a in qq.answers.all().order_by("order")
             ]
-            questions.append({
-                'id': qq.id,
-                'text': qq.text,
-                'question_type': qq.question_type,
-                'level': qq.level,
-                'order': qq.order,
-                'xp': qq.xp,
-                'explanation': qq.explanation,
-                'answers': answers,
-            })
-        result.append({
-            'id': q.id,
-            'title': q.title,
-            'description': q.description,
-            'is_active': q.is_active,
-            'created_at': q.created_at,
-            'updated_at': q.updated_at,
-            'topics': list(q.topics.all()),
-            'questions': questions,
-        })
+            questions.append(
+                {
+                    "id": qq.id,
+                    "text": qq.text,
+                    "question_type": qq.question_type,
+                    "level": qq.level,
+                    "order": qq.order,
+                    "xp": qq.xp,
+                    "explanation": qq.explanation,
+                    "answers": answers,
+                }
+            )
+        result.append(
+            {
+                "id": q.id,
+                "title": q.title,
+                "description": q.description,
+                "is_active": q.is_active,
+                "created_at": q.created_at,
+                "updated_at": q.updated_at,
+                "topics": list(q.topics.all()),
+                "questions": questions,
+            }
+        )
     return result
 
 
@@ -210,84 +218,90 @@ def submit_quiz(request, payload: QuizSubmission):
     results = []
     total_xp = 0
     correct_count = 0
-    
+
     for submission in payload.answers:
         question = get_object_or_404(Question, id=submission.question_id, quiz=quiz)
         is_correct = False
         xp = 0
-        
+
         if question.question_type == Question.MCQ:
-            # For multiple choice - check answer_id
             if submission.answer_id:
-                answer = get_object_or_404(Answer, id=submission.answer_id, question=question)
+                answer = get_object_or_404(
+                    Answer, id=submission.answer_id, question=question
+                )
                 is_correct = answer.is_correct
         else:
-            # For open question - check text match (case-insensitive)
             if submission.text and question.correct_text_answer:
-                is_correct = submission.text.lower().strip() == question.correct_text_answer.lower().strip()
-        
+                is_correct = (
+                    submission.text.lower().strip()
+                    == question.correct_text_answer.lower().strip()
+                )
+
         if is_correct:
             xp = question.xp
             correct_count += 1
             total_xp += xp
-        
-        results.append({
-            'question_id': question.id,
-            'is_correct': is_correct,
-            'explanation': question.explanation,
-            'xp': xp,
-        })
 
-    # Save XP only for authenticated children
+        results.append(
+            {
+                "question_id": question.id,
+                "is_correct": is_correct,
+                "explanation": question.explanation,
+                "xp": xp,
+            }
+        )
+
     if child is not None and total_xp > 0:
         _award_xp(child, total_xp, f"quiz_{quiz.id}", quiz.subject)
         _update_streak(child)
 
     return {
-        'total_xp': total_xp,
-        'correct_count': correct_count,
-        'total_count': len(payload.answers),
-        'answers': results,
+        "total_xp": total_xp,
+        "correct_count": correct_count,
+        "total_count": len(payload.answers),
+        "answers": results,
     }
 
 
 @router.get("/quizzes/{quiz_id}/", response=PublicQuizSchema)
 def get_quiz(request, quiz_id: int):
-    quiz = get_object_or_404(Quiz.objects.prefetch_related("questions__answers", "topics"), id=quiz_id)
+    quiz = get_object_or_404(
+        Quiz.objects.prefetch_related("questions__answers", "topics"), id=quiz_id
+    )
     child = _get_child_or_none(request)
     if child is None:
         if not quiz.topics.filter(id__in=_get_free_topic_ids()).exists():
             raise HttpError(403, "Quiz access requires child authentication")
     questions = []
-    for q in quiz.questions.all().order_by('order'):
+    for q in quiz.questions.all().order_by("order"):
         answers = [
             {
-                'id': a.id,
-                'text': a.text,
-                'order': a.order,
+                "id": a.id,
+                "text": a.text,
+                "order": a.order,
             }
-            for a in q.answers.all().order_by('order')
+            for a in q.answers.all().order_by("order")
         ]
-        questions.append({
-            'id': q.id,
-            'text': q.text,
-            'question_type': q.question_type,
-            'level': q.level,
-            'order': q.order,
-            'xp': q.xp,
-            'explanation': q.explanation,
-            'answers': answers,
-        })
+        questions.append(
+            {
+                "id": q.id,
+                "text": q.text,
+                "question_type": q.question_type,
+                "level": q.level,
+                "order": q.order,
+                "xp": q.xp,
+                "explanation": q.explanation,
+                "answers": answers,
+            }
+        )
 
     return {
-        'id': quiz.id,
-        'title': quiz.title,
-        'description': quiz.description,
-        'is_active': quiz.is_active,
-        'created_at': quiz.created_at,
-        'updated_at': quiz.updated_at,
-        'topics': list(quiz.topics.all()),
-        'questions': questions,
+        "id": quiz.id,
+        "title": quiz.title,
+        "description": quiz.description,
+        "is_active": quiz.is_active,
+        "created_at": quiz.created_at,
+        "updated_at": quiz.updated_at,
+        "topics": list(quiz.topics.all()),
+        "questions": questions,
     }
-
-

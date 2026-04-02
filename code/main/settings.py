@@ -26,13 +26,13 @@ CSRF_TRUSTED_ORIGINS = project_env.get("CSRF_TRUSTED_ORIGINS", [])
 CSRF_COOKIE_SECURE = True  # Set to True when using HTTPS
 CSRF_COOKIE_HTTPONLY = False
 CSRF_USE_SESSIONS = False
-CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # Trust proxy headers - CRITICAL for CSRF to work behind nginx
 USE_X_FORWARDED_HOST = True
 USE_X_FORWARDED_PORT = True
 # Tell Django to trust X-Forwarded-Proto header from nginx
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 REDIS_URI = project_env.get("REDIS_URI")
 
@@ -64,15 +64,15 @@ INSTALLED_APPS = [
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
 ]
 
 MIDDLEWARE = [
@@ -105,7 +105,10 @@ TEMPLATES = [
     },
     {
         "BACKEND": "django.template.backends.jinja2.Jinja2",
-        "DIRS": [BASE_DIR / "jinja2", BASE_DIR / "apps/rss/jinja2",],
+        "DIRS": [
+            BASE_DIR / "jinja2",
+            BASE_DIR / "apps/rss/jinja2",
+        ],
         "APP_DIRS": False,
         "OPTIONS": {
             "environment": "main.jinja2.environment",
@@ -147,7 +150,9 @@ BOG_CLIENT_SECRET = "rQM9AuwC3T8P"
 
 USE_BOG_MOCK = False
 
-BOG_OAUTH_TOKEN_URL = "https://oauth2.bog.ge/auth/realms/bog/protocol/openid-connect/token"
+BOG_OAUTH_TOKEN_URL = (
+    "https://oauth2.bog.ge/auth/realms/bog/protocol/openid-connect/token"
+)
 BOG_API_BASE = "https://api.bog.ge/payments/v1"
 
 BOG_CLIENT_INN = "440897317"
@@ -229,7 +234,7 @@ STATIC_URL = "/static/"
 
 MEDIA_ROOT = STORAGE_DIR / "media"
 STATIC_ROOT = STORAGE_DIR / "static"
-SMALL_IMAGE_SUFFIX = '_small'
+SMALL_IMAGE_SUFFIX = "_small"
 
 STATICFILES_DIRS = [
     BASE_DIR / "staticfiles",
@@ -244,8 +249,12 @@ EMAIL_BACKEND = email_env.get(
 EMAIL_HOST = email_env.get("EMAIL_HOST", project_env.get("EMAIL_HOST", "localhost"))
 EMAIL_PORT = int(email_env.get("EMAIL_PORT", project_env.get("EMAIL_PORT", 25)))
 EMAIL_USE_TLS = email_env.get("EMAIL_USE_TLS", project_env.get("EMAIL_USE_TLS", False))
-EMAIL_HOST_USER = email_env.get("EMAIL_HOST_USER", project_env.get("EMAIL_HOST_USER", ""))
-EMAIL_HOST_PASSWORD = email_env.get("EMAIL_HOST_PASSWORD", project_env.get("EMAIL_HOST_PASSWORD", ""))
+EMAIL_HOST_USER = email_env.get(
+    "EMAIL_HOST_USER", project_env.get("EMAIL_HOST_USER", "")
+)
+EMAIL_HOST_PASSWORD = email_env.get(
+    "EMAIL_HOST_PASSWORD", project_env.get("EMAIL_HOST_PASSWORD", "")
+)
 DEFAULT_FROM_EMAIL = email_env.get(
     "DEFAULT_FROM_EMAIL",
     project_env.get("DEFAULT_FROM_EMAIL", "no-reply@localhost"),

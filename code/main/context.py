@@ -30,14 +30,15 @@ def read_client_manifest():
     manifest = json.loads(manifest_file.read_text())
 
     for m in manifest.values():
-        if 'app.css' in m.get('file'):
-            links.append({"html": f'<link rel="stylesheet" href="/static/{m.get("file")}">'})
-            
+        if "app.css" in m.get("file"):
+            links.append(
+                {"html": f'<link rel="stylesheet" href="/static/{m.get("file")}">'}
+            )
+
         if not m.get("isEntry", False):
             continue
 
         islegacy = "-legacy" in m["file"]
-       
 
         if islegacy:
             html = f'<script nomodule src="/static/{m["file"]}"></script>'

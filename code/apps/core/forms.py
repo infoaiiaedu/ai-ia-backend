@@ -19,7 +19,8 @@ class TopicForm(forms.ModelForm):
             "image": ImageWidget(),
             "video": VideoWidget(),
         }
-        
+
+
 class SubjectForm(forms.ModelForm):
     class Meta:
         model = Subject

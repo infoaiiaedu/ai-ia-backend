@@ -38,5 +38,3 @@ def decode_child_jwt_token(token):
         return None, False
     except (jwt.InvalidTokenError, Child.DoesNotExist, KeyError):
         return None, False
-    
-    

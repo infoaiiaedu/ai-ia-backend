@@ -28,58 +28,63 @@ class QuizTitleFilter(admin.SimpleListFilter):
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
     form = SubjectForm
-    list_display = ('name', 'price', 'is_active')
-    search_fields = ('name',)
-    ordering = ('name',)
-    list_filter = ('is_active',)
+    list_display = ("name", "price", "is_active")
+    search_fields = ("name",)
+    ordering = ("name",)
+    list_filter = ("is_active",)
 
 
 @admin.register(Grade)
 class GradeAdmin(admin.ModelAdmin):
-    list_display = ('level',)
-    search_fields = ('level',)
-    ordering = ('level',)
-    
+    list_display = ("level",)
+    search_fields = ("level",)
+    ordering = ("level",)
+
+
 @admin.register(Topic)
 class TopicAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = TopicForm
-    list_display = ['name', 'subject', 'grade', 'order']
-    search_fields = ['name']
-    list_filter = ('subject', 'grade')
-    ordering = ['order']
-    autocomplete_fields = ['subject', 'grade']
-    sortable_field_name = 'order'
+    list_display = ["name", "subject", "grade", "order"]
+    search_fields = ["name"]
+    list_filter = ("subject", "grade")
+    ordering = ["order"]
+    autocomplete_fields = ["subject", "grade"]
+    sortable_field_name = "order"
 
 
 class AnswerInlineFormSet(BaseInlineFormSet):
     def __init__(self, *args, **kwargs):
-        kwargs.pop('default_order_direction', None)
-        kwargs.pop('default_order_field', None)
+        kwargs.pop("default_order_direction", None)
+        kwargs.pop("default_order_field", None)
         super().__init__(*args, **kwargs)
 
     def clean(self):
         try:
             super().clean()
 
-            qtype = getattr(self.instance, 'question_type', None)
+            qtype = getattr(self.instance, "question_type", None)
             if not qtype:
                 for key, val in self.data.items():
-                    if key.endswith('-question_type') or key == 'question_type':
+                    if key.endswith("-question_type") or key == "question_type":
                         qtype = val
                         break
 
             answers = [
-                f for f in self.forms
-                if getattr(f, 'cleaned_data', None) and not f.cleaned_data.get('DELETE', False)
+                f
+                for f in self.forms
+                if getattr(f, "cleaned_data", None)
+                and not f.cleaned_data.get("DELETE", False)
             ]
 
-            if qtype == 'mcq' and len(answers) == 0:
-                raise ValidationError('Multiple choice questions require at least one answer.')
+            if qtype == "mcq" and len(answers) == 0:
+                raise ValidationError(
+                    "Multiple choice questions require at least one answer."
+                )
 
         except ValidationError:
             raise
         except Exception as exc:
-            logger.exception('AnswerInlineFormSet.clean() failed: %s', exc)
+            logger.exception("AnswerInlineFormSet.clean() failed: %s", exc)
             return
 
 
@@ -91,29 +96,36 @@ class AnswerInline(SortableInlineAdminMixin, admin.TabularInline):
     max_num = 10
     verbose_name = "პასუხი"
     verbose_name_plural = "პასუხები"
-    fields = ['text', 'is_correct', 'order']
-    sortable_field_name = 'order'
+    fields = ["text", "is_correct", "order"]
+    sortable_field_name = "order"
 
     class Media:
-        js = ('adminsortable2/js/adminsortable2.js',)
+        js = ("adminsortable2/js/adminsortable2.js",)
 
 
 class QuestionForm(ModelForm):
     class Meta:
         model = Question
-        fields = ('text', 'question_type', 'level', 'xp', 'correct_text_answer', 'explanation')
+        fields = (
+            "text",
+            "question_type",
+            "level",
+            "xp",
+            "correct_text_answer",
+            "explanation",
+        )
 
     class Media:
-        js = ('admin/js/question_type_toggle.js', 'adminsortable2/js/adminsortable2.js')
+        js = ("admin/js/question_type_toggle.js", "adminsortable2/js/adminsortable2.js")
 
 
 class QuestionAdminForm(ModelForm):
     class Meta:
         model = Question
-        fields = '__all__'
+        fields = "__all__"
 
     class Media:
-        js = ('admin/js/question_type_toggle.js', 'adminsortable2/js/adminsortable2.js')
+        js = ("admin/js/question_type_toggle.js", "adminsortable2/js/adminsortable2.js")
 
 
 class QuestionInline(admin.StackedInline):
@@ -121,71 +133,84 @@ class QuestionInline(admin.StackedInline):
     form = QuestionForm
     extra = 1
     show_change_link = True
-    fields = ['text', 'question_type', 'level', 'xp', 'correct_text_answer']
+    fields = ["text", "question_type", "level", "xp", "correct_text_answer"]
     verbose_name = "კითხვა"
     verbose_name_plural = "კითხვები"
 
     class Media:
-        js = ('admin/js/question_type_toggle.js', 'adminsortable2/js/adminsortable2.js')
+        js = ("admin/js/question_type_toggle.js", "adminsortable2/js/adminsortable2.js")
 
 
 @admin.register(Quiz)
 class QuizAdmin(admin.ModelAdmin):
-    list_display = ('title', 'subject', 'grade', 'created_at', 'updated_at')
+    list_display = ("title", "subject", "grade", "created_at", "updated_at")
     inlines = [QuestionInline]
-    search_fields = ('title',)
-    list_filter = ('subject', 'grade', 'is_active')
-    autocomplete_fields = ['subject', 'grade', 'topics']
-    ordering = ('-created_at',)
+    search_fields = ("title",)
+    list_filter = ("subject", "grade", "is_active")
+    autocomplete_fields = ["subject", "grade", "topics"]
+    ordering = ("-created_at",)
 
     class Media:
-        js = ('admin/js/question_type_toggle.js',)
+        js = ("admin/js/question_type_toggle.js",)
 
 
 @admin.register(QuizImport)
 class QuizImportAdmin(admin.ModelAdmin):
-    list_display = ('name', 'json_file', 'status', 'processed_at', 'created_at')
-    list_filter = ('status', 'subject', 'grade', 'target_quiz')
-    search_fields = ('name', 'json_file')
-    autocomplete_fields = ('subject', 'grade', 'topics', 'target_quiz')
-    filter_horizontal = ('topics',)
-    readonly_fields = ('status', 'last_error', 'processed_at', 'created_at')
+    list_display = ("name", "json_file", "status", "processed_at", "created_at")
+    list_filter = ("status", "subject", "grade", "target_quiz")
+    search_fields = ("name", "json_file")
+    autocomplete_fields = ("subject", "grade", "topics", "target_quiz")
+    filter_horizontal = ("topics",)
+    readonly_fields = ("status", "last_error", "processed_at", "created_at")
     fieldsets = (
-        ('Import', {
-            'fields': ('name', 'json_file', 'target_quiz', 'level', 'subject', 'grade', 'topics')
-        }),
-        ('Status', {
-            'fields': ('status', 'last_error', 'processed_at', 'created_at')
-        }),
+        (
+            "Import",
+            {
+                "fields": (
+                    "name",
+                    "json_file",
+                    "target_quiz",
+                    "level",
+                    "subject",
+                    "grade",
+                    "topics",
+                )
+            },
+        ),
+        ("Status", {"fields": ("status", "last_error", "processed_at", "created_at")}),
     )
 
 
 @admin.register(Question)
 class QuestionAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = QuestionAdminForm
-    list_display = ['text_short', 'quiz', 'question_type', 'level', 'xp', 'order']
-    list_filter = (QuizTitleFilter, 'question_type')
-    search_fields = ('text', 'quiz__title')
+    list_display = ["text_short", "quiz", "question_type", "level", "xp", "order"]
+    list_filter = (QuizTitleFilter, "question_type")
+    search_fields = ("text", "quiz__title")
     inlines = [AnswerInline]
-    autocomplete_fields = ('quiz',)
+    autocomplete_fields = ("quiz",)
 
     fieldsets = (
-        ('ძირითადი ინფორმაცია', {
-            'fields': ('quiz', 'text', 'question_type', 'level', 'order', 'xp')
-        }),
-        ('პასუხები', {
-            'fields': ('correct_text_answer',),
-            'description': 'სწორი პასუხი საჭირო მხოლოდ ღია კითხვებისთვის'
-        }),
+        (
+            "ძირითადი ინფორმაცია",
+            {"fields": ("quiz", "text", "question_type", "level", "order", "xp")},
+        ),
+        (
+            "პასუხები",
+            {
+                "fields": ("correct_text_answer",),
+                "description": "სწორი პასუხი საჭირო მხოლოდ ღია კითხვებისთვის",
+            },
+        ),
     )
 
     def text_short(self, obj):
-        return obj.text[:50] + '...' if len(obj.text) > 50 else obj.text
+        return obj.text[:50] + "..." if len(obj.text) > 50 else obj.text
 
-    text_short.short_description = 'კითხვა'
+    text_short.short_description = "კითხვა"
 
     class Media:
-        js = ('admin/js/question_type_toggle.js',)
+        js = ("admin/js/question_type_toggle.js",)
 
 
 # @admin.register(Answer)

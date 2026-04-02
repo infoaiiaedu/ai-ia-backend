@@ -2,10 +2,12 @@ from ninja import Schema
 from typing import List, Optional
 from datetime import datetime
 
+
 class GradeSchema(Schema):
     id: int
     level: str
     quizzes_count: int = 0
+
 
 class SubjectSchema(Schema):
     id: int
@@ -87,8 +89,8 @@ class QuizIn(Schema):
 
 
 class PublicAnswerSchema(Schema):
-        id: int
-        text: str
+    id: int
+    text: str
 
 
 class PublicQuestionSchema(Schema):
@@ -136,6 +138,7 @@ class StudentContextSchema(Schema):
 
 class AnswerSubmission(Schema):
     """User's answer submission - can be answer_id or text"""
+
     question_id: int
     answer_id: Optional[int] = None  # For MCQ
     text: Optional[str] = None  # For open questions
@@ -143,12 +146,14 @@ class AnswerSubmission(Schema):
 
 class QuizSubmission(Schema):
     """Submit multiple answers for a quiz"""
+
     quiz_id: int
     answers: List[AnswerSubmission]
 
 
 class AnswerResult(Schema):
     """Result of a single answer validation"""
+
     question_id: int
     is_correct: bool
     explanation: Optional[str] = None
@@ -157,9 +162,9 @@ class AnswerResult(Schema):
 
 class QuizSubmissionResult(Schema):
     """Result of quiz submission"""
+
     total_xp: int
     correct_count: int
     total_count: int
     answers: List[AnswerResult]
     questions: List[PublicQuestionSchema] = []
-

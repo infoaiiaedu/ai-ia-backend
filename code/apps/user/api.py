@@ -16,8 +16,19 @@ from apps.user.models import (
     ChildRefreshToken,
 )
 from apps.core.models import Subject, Topic, Question, Answer
-from .schema import TokenSchema, ChildRegisterSchema, OTPResponseSchema, AvatarSchema, ChildLoginSchema
-from .schema import ParentChildSchema, ParentProfileSchema, DiagnosticAnswerSchema, DiagnosticResponseSchema
+from .schema import (
+    TokenSchema,
+    ChildRegisterSchema,
+    OTPResponseSchema,
+    AvatarSchema,
+    ChildLoginSchema,
+)
+from .schema import (
+    ParentChildSchema,
+    ParentProfileSchema,
+    DiagnosticAnswerSchema,
+    DiagnosticResponseSchema,
+)
 from .schema import LeaderboardEntrySchema, LeaderboardResponseSchema
 from .schema import ChildProfileSchema
 from .api_utils import (
@@ -36,9 +47,6 @@ from django.shortcuts import get_object_or_404
 router = Router(tags=["User"])
 
 
-# ---------------------------
-# Parent Registration (sends OTP via Twilio)
-# ---------------------------
 @router.post("/parent/register/", response=OTPResponseSchema)
 def parent_register(
     request,
@@ -73,9 +81,6 @@ def parent_register(
     return {"message": "Parent created. Check your email or phone for OTP."}
 
 
-# ---------------------------
-# Parent Login (sends OTP)
-# ---------------------------
 @router.post("/parent/login/", response=OTPResponseSchema)
 def parent_login(
     request,
@@ -99,9 +104,6 @@ def parent_login(
     return {"message": "OTP sent. Check your email."}
 
 
-# ---------------------------
-# Parent Verify OTP and Login
-# ---------------------------
 @router.post("/parent/verify_otp/", response=TokenSchema)
 def parent_verify_otp(
     request,
@@ -124,7 +126,7 @@ def parent_verify_otp(
         return {
             "access_token": tokens["access_token"],
             "refresh_token": tokens["refresh_token"],
-            "message": "Parent verified and logged in successfully."
+            "message": "Parent verified and logged in successfully.",
         }
 
     raise HttpError(400, "Invalid or expired OTP")
@@ -170,6 +172,7 @@ def child_register(request, data: ChildRegisterSchema):
         "access_code": access_code,
     }
 
+
 @router.post("/child/login/", response=TokenSchema)
 def child_login(request, data: ChildLoginSchema = Form(...)):
     try:
@@ -200,7 +203,7 @@ def child_login(request, data: ChildLoginSchema = Form(...)):
     return {
         "access_token": tokens["access_token"],
         "refresh_token": tokens["refresh_token"],
-        "message": f"Child {child.name} logged in successfully."
+        "message": f"Child {child.name} logged in successfully.",
     }
 
 
@@ -223,6 +226,7 @@ def avatars_list(request):
         for logo in logos
     ]
 
+
 @router.get("/parent/children/", response=List[ParentChildSchema], auth=AuthBearer())
 def parent_children(request):
     parent: Parent = request.auth
@@ -237,7 +241,10 @@ def parent_children(request):
         age = None
         if child.date_of_birth:
             age = today.year - child.date_of_birth.year
-            if (today.month, today.day) < (child.date_of_birth.month, child.date_of_birth.day):
+            if (today.month, today.day) < (
+                child.date_of_birth.month,
+                child.date_of_birth.day,
+            ):
                 age -= 1
 
         subject = None
@@ -312,10 +319,11 @@ def child_profile(request):
     }
 
 
-
-
-
-@router.post("/child/diagnostic/start/", response=DiagnosticResponseSchema, auth=ChildAuthBearer())
+@router.post(
+    "/child/diagnostic/start/",
+    response=DiagnosticResponseSchema,
+    auth=ChildAuthBearer(),
+)
 def diagnostic_start(
     request,
     max_questions: Optional[int] = Form(None),
@@ -330,12 +338,18 @@ def diagnostic_start(
     if not topics:
         raise HttpError(400, "No diagnostic topics available")
 
-    session = DiagnosticSession.objects.filter(
-        child=child, subject=child.subject, is_complete=False
-    ).order_by("-created_at").first()
+    session = (
+        DiagnosticSession.objects.filter(
+            child=child, subject=child.subject, is_complete=False
+        )
+        .order_by("-created_at")
+        .first()
+    )
 
     if session is not None:
-        expires_at = session.created_at + timezone.timedelta(minutes=session.max_minutes)
+        expires_at = session.created_at + timezone.timedelta(
+            minutes=session.max_minutes
+        )
         if timezone.now() >= expires_at:
             session.is_complete = True
             session.completed_at = timezone.now()
@@ -354,7 +368,11 @@ def diagnostic_start(
             .values_list("id", flat=True)
         )
         start_topic_id = random.choice(eligible_topic_ids or topics)
-        start_index = topics.index(start_topic_id) if start_topic_id in topics else (len(topics) - 1) // 2
+        start_index = (
+            topics.index(start_topic_id)
+            if start_topic_id in topics
+            else (len(topics) - 1) // 2
+        )
         session = DiagnosticSession.objects.create(
             child=child,
             subject=child.subject,
@@ -370,13 +388,19 @@ def diagnostic_start(
         session.current_level = 2
         session.save(update_fields=["current_level"])
 
-    if session.current_question_id and session.total_answered < len(session.asked_question_ids):
-        question = Question.objects.prefetch_related("answers").get(id=session.current_question_id)
+    if session.current_question_id and session.total_answered < len(
+        session.asked_question_ids
+    ):
+        question = Question.objects.prefetch_related("answers").get(
+            id=session.current_question_id
+        )
         topic_id = session.current_topic_id or session.topics[session.current_index]
         return _diagnostic_response(session, question, topic_id)
 
     topic_id = session.topics[session.current_index]
-    question = _pick_question(topic_id, session.asked_question_ids, session.current_level)
+    question = _pick_question(
+        topic_id, session.asked_question_ids, session.current_level
+    )
     if not question:
         session.is_complete = True
         session.completed_at = timezone.now()
@@ -387,12 +411,18 @@ def diagnostic_start(
     session.current_question_id = question.id
     if question.id not in session.asked_question_ids:
         session.asked_question_ids.append(question.id)
-    session.save(update_fields=["current_topic_id", "current_question_id", "asked_question_ids"])
+    session.save(
+        update_fields=["current_topic_id", "current_question_id", "asked_question_ids"]
+    )
 
     return _diagnostic_response(session, question, topic_id)
 
 
-@router.post("/child/diagnostic/answer/", response=DiagnosticResponseSchema, auth=ChildAuthBearer())
+@router.post(
+    "/child/diagnostic/answer/",
+    response=DiagnosticResponseSchema,
+    auth=ChildAuthBearer(),
+)
 def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
     child: Child = request.auth
     _update_streak(child)
@@ -406,12 +436,14 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
         session.completed_at = timezone.now()
         session.current_question_id = None
         session.current_topic_id = None
-        session.save(update_fields=[
-            "is_complete",
-            "completed_at",
-            "current_question_id",
-            "current_topic_id",
-        ])
+        session.save(
+            update_fields=[
+                "is_complete",
+                "completed_at",
+                "current_question_id",
+                "current_topic_id",
+            ]
+        )
         return _diagnostic_response(session)
 
     if session.current_question_id != data.question_id:
@@ -429,10 +461,18 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
             is_correct = bool(answer and answer.is_correct)
     else:
         if data.text and question.correct_text_answer:
-            is_correct = data.text.strip().lower() == question.correct_text_answer.strip().lower()
+            is_correct = (
+                data.text.strip().lower()
+                == question.correct_text_answer.strip().lower()
+            )
 
     if is_correct:
-        _award_xp(child, question.xp or 0, "diagnostic_correct", question.quiz.subject or child.subject)
+        _award_xp(
+            child,
+            question.xp or 0,
+            "diagnostic_correct",
+            question.quiz.subject or child.subject,
+        )
 
     stats_key = str(topic_id)
     stats = session.topic_stats.get(stats_key, {"asked": 0, "correct": 0})
@@ -442,20 +482,28 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
     session.topic_stats[stats_key] = stats
     session.total_answered += 1
 
-    if not is_correct and stats["asked"] < 2 and session.total_answered < session.max_questions:
-        next_question = _pick_question(topic_id, session.asked_question_ids, session.current_level)
+    if (
+        not is_correct
+        and stats["asked"] < 2
+        and session.total_answered < session.max_questions
+    ):
+        next_question = _pick_question(
+            topic_id, session.asked_question_ids, session.current_level
+        )
         if next_question:
             session.current_topic_id = topic_id
             session.current_question_id = next_question.id
             if next_question.id not in session.asked_question_ids:
                 session.asked_question_ids.append(next_question.id)
-            session.save(update_fields=[
-                "current_topic_id",
-                "current_question_id",
-                "asked_question_ids",
-                "topic_stats",
-                "total_answered",
-            ])
+            session.save(
+                update_fields=[
+                    "current_topic_id",
+                    "current_question_id",
+                    "asked_question_ids",
+                    "topic_stats",
+                    "total_answered",
+                ]
+            )
             return _diagnostic_response(session, next_question, topic_id)
 
     outcome = "known" if stats["correct"] > 0 else "weak"
@@ -480,71 +528,86 @@ def diagnostic_answer(request, data: DiagnosticAnswerSchema = Form(...)):
     else:
         session.high_index = session.current_index - 1
 
-    if session.total_answered >= session.max_questions or session.low_index > session.high_index:
+    if (
+        session.total_answered >= session.max_questions
+        or session.low_index > session.high_index
+    ):
         session.is_complete = True
         session.completed_at = timezone.now()
         session.current_question_id = None
         session.current_topic_id = None
-        session.save(update_fields=[
-            "is_complete",
-            "completed_at",
-            "current_question_id",
-            "current_topic_id",
-            "topic_outcomes",
-            "topic_stats",
-            "total_answered",
-            "low_index",
-            "high_index",
-            "boundary_topic_id",
-            "current_level",
-        ])
+        session.save(
+            update_fields=[
+                "is_complete",
+                "completed_at",
+                "current_question_id",
+                "current_topic_id",
+                "topic_outcomes",
+                "topic_stats",
+                "total_answered",
+                "low_index",
+                "high_index",
+                "boundary_topic_id",
+                "current_level",
+            ]
+        )
         return _diagnostic_response(session)
 
     session.current_index = (session.low_index + session.high_index) // 2
     next_topic_id = session.topics[session.current_index]
-    next_question = _pick_question(next_topic_id, session.asked_question_ids, session.current_level)
+    next_question = _pick_question(
+        next_topic_id, session.asked_question_ids, session.current_level
+    )
     if not next_question:
         session.is_complete = True
         session.completed_at = timezone.now()
         session.current_question_id = None
         session.current_topic_id = None
-        session.save(update_fields=[
-            "is_complete",
-            "completed_at",
-            "current_question_id",
-            "current_topic_id",
-            "topic_outcomes",
-            "topic_stats",
-            "total_answered",
-            "low_index",
-            "high_index",
-            "current_index",
-            "current_level",
-        ])
+        session.save(
+            update_fields=[
+                "is_complete",
+                "completed_at",
+                "current_question_id",
+                "current_topic_id",
+                "topic_outcomes",
+                "topic_stats",
+                "total_answered",
+                "low_index",
+                "high_index",
+                "current_index",
+                "current_level",
+            ]
+        )
         return _diagnostic_response(session)
 
     session.current_topic_id = next_topic_id
     session.current_question_id = next_question.id
     if next_question.id not in session.asked_question_ids:
         session.asked_question_ids.append(next_question.id)
-    session.save(update_fields=[
-        "current_topic_id",
-        "current_question_id",
-        "asked_question_ids",
-        "topic_outcomes",
-        "topic_stats",
-        "total_answered",
-        "low_index",
-        "high_index",
-        "current_index",
-        "boundary_topic_id",
-        "current_level",
-    ])
+    session.save(
+        update_fields=[
+            "current_topic_id",
+            "current_question_id",
+            "asked_question_ids",
+            "topic_outcomes",
+            "topic_stats",
+            "total_answered",
+            "low_index",
+            "high_index",
+            "current_index",
+            "boundary_topic_id",
+            "current_level",
+        ]
+    )
 
     return _diagnostic_response(session, next_question, next_topic_id)
 
 
-@router.get("/leaderboard/{int:subject_id}/", response=LeaderboardResponseSchema, auth=ChildAuthBearer())
+@router.get(
+    "/leaderboard/{int:subject_id}/",
+    response=LeaderboardResponseSchema,
+    auth=ChildAuthBearer(),
+)
 def leaderboard(request, subject_id: int, period: str = "weekly"):
     child: Child = request.auth
     subject = get_object_or_404(Subject, id=subject_id)

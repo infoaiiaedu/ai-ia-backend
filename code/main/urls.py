@@ -13,5 +13,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", api.urls),
     # Redirect /api/docs to /api/docs/ (with trailing slash)
-    re_path(r'^api/docs$', RedirectView.as_view(url='/api/docs/', permanent=True)),
+    re_path(r"^api/docs$", RedirectView.as_view(url="/api/docs/", permanent=True)),
 ]

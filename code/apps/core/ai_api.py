@@ -5,7 +5,11 @@ from ninja import Router
 from ninja.errors import HttpError
 
 from apps.core.models import Topic
-from apps.core.schema import StudentContextSchema, TopicProfileSchema, ActivitySnapshotSchema
+from apps.core.schema import (
+    StudentContextSchema,
+    TopicProfileSchema,
+    ActivitySnapshotSchema,
+)
 from apps.user.api_utils import ChildAuthBearer
 from apps.user.models import Child, DiagnosticSession, XPEvent
 
@@ -96,8 +100,12 @@ def get_student_context(request):
     avg_accuracy = 0.0
     if session and session.topic_outcomes:
         outcomes = session.topic_outcomes
-        weak_ids = [int(topic_id) for topic_id, status in outcomes.items() if status == "weak"]
-        strong_ids = [int(topic_id) for topic_id, status in outcomes.items() if status == "known"]
+        weak_ids = [
+            int(topic_id) for topic_id, status in outcomes.items() if status == "weak"
+        ]
+        strong_ids = [
+            int(topic_id) for topic_id, status in outcomes.items() if status == "known"
+        ]
 
         weak_topics = _build_topic_profiles(weak_ids)
         strong_topics = _build_topic_profiles(strong_ids)

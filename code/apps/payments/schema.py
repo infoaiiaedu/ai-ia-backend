@@ -2,19 +2,23 @@ from pydantic import BaseModel
 from typing import List
 from typing import Literal, Optional, Any, Dict
 
+
 class BasketItem(BaseModel):
     product_id: str
     quantity: int
     unit_price: float
+
 
 class PurchaseUnit(BaseModel):
     total_amount: float
     currency: str
     basket: List[BasketItem]
 
+
 class RedirectUrls(BaseModel):
     success: str
     fail: str
+
 
 class CreateOrderRequest(BaseModel):
     subject_id: int

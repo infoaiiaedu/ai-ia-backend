@@ -13,7 +13,9 @@ class QuizImportError(Exception):
     pass
 
 
-def resolve_correct_option(options: List[Dict[str, str]], correct_raw: Optional[str]) -> Optional[str]:
+def resolve_correct_option(
+    options: List[Dict[str, str]], correct_raw: Optional[str]
+) -> Optional[str]:
     if not options or not correct_raw:
         return None
     correct_raw = correct_raw.strip()
@@ -187,7 +189,9 @@ def _import_questions(
                 question_spec.get("correctIndex"),
             )
             if correct_label is None:
-                warnings.append(f"Question '{question.text[:50]}' has no valid correct option.")
+                warnings.append(
+                    f"Question '{question.text[:50]}' has no valid correct option."
+                )
 
             for opt_idx, option in enumerate(options, start=1):
                 Answer.objects.create(

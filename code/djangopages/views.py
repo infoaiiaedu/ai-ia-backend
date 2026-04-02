@@ -34,7 +34,7 @@ class PageBaseView(View):
 
         if str(ID).isdigit() and int(ID).bit_length() > 63:
             raise Http404
-        
+
         self.http_host = get_http_host(request)
         self.request = request
 
@@ -51,9 +51,7 @@ class PageBaseView(View):
         if not url.startswith("/"):
             url = settings.MEDIA_URL + url
 
-        return build_url(
-            "https", self.http_host.host, url, query, fragment
-        )
+        return build_url("https", self.http_host.host, url, query, fragment)
 
     def get_context_data(self, *args, **kwargs):
         context = {}
@@ -126,7 +124,7 @@ class PageBaseView(View):
         # twitter meta tags
         metatags.extend(
             [
-                    {"tag": "meta", "name": "twitter:title", "content": title},
+                {"tag": "meta", "name": "twitter:title", "content": title},
                 {"tag": "meta", "name": "twitter:image", "content": image},
                 {"tag": "meta", "name": "twitter:description", "content": description},
                 {

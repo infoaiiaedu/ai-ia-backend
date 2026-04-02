@@ -5,6 +5,7 @@ import httpx
 from django.conf import settings
 import time
 
+
 class BOGClient:
     def __init__(self):
         self.client_id = settings.BOG_CLIENT_ID
@@ -18,7 +19,9 @@ class BOGClient:
         if self._access_token and now < self._expires_at - 60:  # refresh a bit early
             return self._access_token
 
-        auth = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
+        auth = base64.b64encode(
+            f"{self.client_id}:{self.client_secret}".encode()
+        ).decode()
         headers = {
             "Authorization": f"Basic {auth}",
             "Content-Type": "application/x-www-form-urlencoded",

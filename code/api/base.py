@@ -10,7 +10,7 @@ api = NinjaAPI(
     servers=[
         {"url": "https://api.eduaiia.com", "description": "Production Server"},
         {"url": "http://localhost:8080", "description": "Local Development Server"},
-    ]
+    ],
 )
 
 api.add_router("/payments/", payments_router)

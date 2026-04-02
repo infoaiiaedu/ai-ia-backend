@@ -23,6 +23,7 @@ class ChildAuthBearer(HttpBearer):
             return None
         return account
 
+
 STREAK_BONUS_MAP = {
     7: 50,
     14: 120,
@@ -31,7 +32,9 @@ STREAK_BONUS_MAP = {
 }
 
 
-def _award_xp(child: Child, amount: int, source: str, subject: Optional[Subject] = None):
+def _award_xp(
+    child: Child, amount: int, source: str, subject: Optional[Subject] = None
+):
     if amount <= 0:
         return
     XPEvent.objects.create(child=child, subject=subject, amount=amount, source=source)
@@ -59,7 +62,9 @@ def _update_streak(child: Child):
 
 def _build_profile_progress(child: Child) -> dict:
     completed_sessions = list(
-        DiagnosticSession.objects.filter(child=child, is_complete=True).only("topic_outcomes")
+        DiagnosticSession.objects.filter(child=child, is_complete=True).only(
+            "topic_outcomes"
+        )
     )
     tests_completed = len(completed_sessions)
     tests_attempted = DiagnosticSession.objects.filter(child=child).count()
@@ -100,7 +105,10 @@ def _build_weekly_activity(child: Child) -> List[bool]:
     ).values_list("created_at", flat=True)
     active_dates = {timezone.localdate(dt) for dt in event_dates}
 
-    if child.last_active_date and start_of_week <= child.last_active_date <= end_of_week:
+    if (
+        child.last_active_date
+        and start_of_week <= child.last_active_date <= end_of_week
+    ):
         active_dates.add(child.last_active_date)
 
     return [
@@ -118,7 +126,9 @@ def _topics_with_questions(subject: Subject) -> List[int]:
     )
 
 
-def _pick_question(topic_id: int, asked_ids: List[int], level: Optional[int] = None) -> Optional[Question]:
+def _pick_question(
+    topic_id: int, asked_ids: List[int], level: Optional[int] = None
+) -> Optional[Question]:
     qs = (
         Question.objects.filter(quiz__topics=topic_id)
         .exclude(id__in=asked_ids)
@@ -140,7 +150,9 @@ def _pick_question(topic_id: int, asked_ids: List[int], level: Optional[int] = N
     return question
 
 
-def _serialize_diagnostic_question(question: Question, topic_id: int, topic_name: Optional[str]):
+def _serialize_diagnostic_question(
+    question: Question, topic_id: int, topic_name: Optional[str]
+):
     answers = []
     if question.question_type == Question.MCQ:
         answers = [
@@ -194,8 +206,12 @@ def _diagnostic_response(
     }
 
     if question is not None and topic_id is not None:
-        topic_name = Topic.objects.filter(id=topic_id).values_list("name", flat=True).first()
-        payload["question"] = _serialize_diagnostic_question(question, topic_id, topic_name)
+        topic_name = (
+            Topic.objects.filter(id=topic_id).values_list("name", flat=True).first()
+        )
+        payload["question"] = _serialize_diagnostic_question(
+            question, topic_id, topic_name
+        )
 
     if session.is_complete:
         topics, weak_topics = _build_topic_status(session)

@@ -62,7 +62,11 @@ def _build_default_config() -> Dict[str, Any]:
         "Root_Pass": os.environ.get("SERVER_ROOT_PASS", "root"),
     }
 
-    return {"project": project_config, "database": database_config, "server": server_config}
+    return {
+        "project": project_config,
+        "database": database_config,
+        "server": server_config,
+    }
 
 
 @lru_cache(maxsize=1)

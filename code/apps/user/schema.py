@@ -3,6 +3,7 @@ from typing import Optional, List
 from datetime import date
 from pydantic import field_validator
 
+
 class RegisterSchema(Schema):
     name: str
     mobile_phone: str
@@ -12,7 +13,7 @@ class RegisterSchema(Schema):
 class TokenSchema(Schema):
     access_token: str
     refresh_token: str
-    
+
 
 class ChildRegisterSchema(Schema):
     first_name: str
@@ -21,6 +22,7 @@ class ChildRegisterSchema(Schema):
     date_of_birth: date
     grade: int
     subject_id: int
+
 
 class ChildLoginSchema(Schema):
     access_code: str
@@ -111,6 +113,7 @@ class DiagnosticResponseSchema(Schema):
     boundary_topic: Optional[DiagnosticTopicStatusSchema] = None
     weak_topics: List[DiagnosticTopicStatusSchema] = []
     topics: List[DiagnosticTopicStatusSchema] = []
+
 
 class OTPResponseSchema(Schema):
     message: str

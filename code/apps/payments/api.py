@@ -25,7 +25,9 @@ logger.setLevel(logging.INFO)
 USE_BOG_MOCK = getattr(settings, "USE_BOG_MOCK", True)
 SITE_URL = settings.SITE_URL
 BOG_WEBHOOK_SECRET = getattr(settings, "BOG_WEBHOOK_SECRET", None)
-BOG_WEBHOOK_SIGNATURE_HEADER = getattr(settings, "BOG_WEBHOOK_SIGNATURE_HEADER", "X-BOG-SIGNATURE")
+BOG_WEBHOOK_SIGNATURE_HEADER = getattr(
+    settings, "BOG_WEBHOOK_SIGNATURE_HEADER", "X-BOG-SIGNATURE"
+)
 BOG_HTTP_TIMEOUT_SECONDS = getattr(settings, "BOG_HTTP_TIMEOUT_SECONDS", 15)
 
 
@@ -35,7 +37,10 @@ class AuthBearer(HttpBearer):
         try:
             account, ok = await sync_to_async(decode_jwt_token)(token)
             if ok:
-                logger.info("Authentication successful for account_id: %s", getattr(account, "id", None))
+                logger.info(
+                    "Authentication successful for account_id: %s",
+                    getattr(account, "id", None),
+                )
                 return account
             else:
                 logger.warning("Authentication failed For token: %s", token)
@@ -55,12 +60,16 @@ def _build_idempotency_key(external_order_id: str) -> str:
 
 def _verify_bog_signature(request) -> bool:
     if not BOG_WEBHOOK_SECRET:
-        logger.warning("BOG webhook secret not configured; skipping signature verification")
+        logger.warning(
+            "BOG webhook secret not configured; skipping signature verification"
+        )
         return True
 
     signature = request.headers.get(BOG_WEBHOOK_SIGNATURE_HEADER)
     if not signature:
-        logger.warning("Missing BOG webhook signature header: %s", BOG_WEBHOOK_SIGNATURE_HEADER)
+        logger.warning(
+            "Missing BOG webhook signature header: %s", BOG_WEBHOOK_SIGNATURE_HEADER
+        )
         return False
 
     expected = hmac.new(
@@ -87,13 +96,17 @@ def _map_order_status(status_key: str) -> str:
 @router.post("/create-order/", auth=AuthBearer())
 async def create_order(request, payload: CreateOrderRequest):
     parent = request.auth
-    logger.info("Creating order for user_id: %s, subject_id: %s", parent.id, payload.subject_id)
+    logger.info(
+        "Creating order for user_id: %s, subject_id: %s", parent.id, payload.subject_id
+    )
 
     external_order_id = (payload.external_order_id or "").strip()
     if not external_order_id:
         raise ValueError("external_order_id is required")
 
-    existing_order = await sync_to_async(Order.objects.filter(external_id=external_order_id).first)()
+    existing_order = await sync_to_async(
+        Order.objects.filter(external_id=external_order_id).first
+    )()
     if existing_order:
         logger.info("Reusing existing order external_id=%s", external_order_id)
         return {
@@ -106,7 +119,9 @@ async def create_order(request, payload: CreateOrderRequest):
         subject = await sync_to_async(Subject.objects.get)(id=payload.subject_id)
         price = _quantize_amount(Decimal(str(subject.price)))
         if price <= 0:
-            logger.error("Invalid subject price: %s for subject_id: %s", price, subject.id)
+            logger.error(
+                "Invalid subject price: %s for subject_id: %s", price, subject.id
+            )
             raise ValueError("Subject price must be > 0")
         logger.info("Subject price: %s", price)
     except Subject.DoesNotExist:
@@ -125,7 +140,7 @@ async def create_order(request, payload: CreateOrderRequest):
                 total_amount=float(price),
                 status="PENDING",
                 redirect_url=redirect_url,
-                subject=subject
+                subject=subject,
             )
             logger.info("Created mock order with bog_id: %s", bog_id)
         else:
@@ -147,19 +162,23 @@ async def create_order(request, payload: CreateOrderRequest):
                     "currency": "GEL",
                     "total_amount": float(price),
                     "basket": [
-                        {"product_id": str(subject.id), "quantity": 1, "unit_price": float(price)}
-                    ]
+                        {
+                            "product_id": str(subject.id),
+                            "quantity": 1,
+                            "unit_price": float(price),
+                        }
+                    ],
                 },
                 "redirect_urls": {
                     "success": f"{SITE_URL}/success",
-                    "fail": f"{SITE_URL}/fail"
-                }
+                    "fail": f"{SITE_URL}/fail",
+                },
             }
 
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
-                "Idempotency-Key": _build_idempotency_key(external_order_id)
+                "Idempotency-Key": _build_idempotency_key(external_order_id),
             }
 
             logger.info("Sending BOG create_order request: %s", body)
@@ -167,7 +186,11 @@ async def create_order(request, payload: CreateOrderRequest):
             timeout = httpx.Timeout(BOG_HTTP_TIMEOUT_SECONDS)
             async with httpx.AsyncClient(timeout=timeout) as client:
                 try:
-                    resp = await client.post(f"{settings.BOG_API_BASE}/ecommerce/orders", json=body, headers=headers)
+                    resp = await client.post(
+                        f"{settings.BOG_API_BASE}/ecommerce/orders",
+                        json=body,
+                        headers=headers,
+                    )
                     resp.raise_for_status()
                     data = resp.json()
                     logger.info("Received BOG response: %s", data)
@@ -186,7 +209,7 @@ async def create_order(request, payload: CreateOrderRequest):
                 total_amount=float(price),
                 status="PENDING",
                 redirect_url=redirect_url,
-                subject=subject
+                subject=subject,
             )
             logger.info("Order created with bog_id: %s", bog_id)
 
@@ -209,7 +232,9 @@ def bog_callback(request, payload: BOGCallbackPayload):
     try:
         order_id = payload.body.order_id
         status_key = payload.body.order_status.key.upper()
-        logger.info("Processing callback for order_id: %s with status: %s", order_id, status_key)
+        logger.info(
+            "Processing callback for order_id: %s with status: %s", order_id, status_key
+        )
 
         with transaction.atomic():
             order = Order.objects.select_for_update().get(bog_id=order_id)
@@ -227,17 +252,27 @@ def bog_callback(request, payload: BOGCallbackPayload):
                     user=order.user,
                     subject=order.subject,
                     order=order,
-                    defaults={"end_date": timezone.now() + timedelta(days=30)}
+                    defaults={"end_date": timezone.now() + timedelta(days=30)},
                 )
                 if created:
-                    logger.info("Created new subscription for user_id: %s, subject_id: %s", order.user.id, order.subject.id)
+                    logger.info(
+                        "Created new subscription for user_id: %s, subject_id: %s",
+                        order.user.id,
+                        order.subject.id,
+                    )
                 else:
                     sub.end_date += timedelta(days=30)
                     sub.save()
-                    logger.info("Extended existing subscription for user_id: %s, new end_date: %s", order.user.id, sub.end_date)
+                    logger.info(
+                        "Extended existing subscription for user_id: %s, new end_date: %s",
+                        order.user.id,
+                        sub.end_date,
+                    )
 
     except Order.DoesNotExist:
-        logger.warning("Callback received for unknown order_id: %s", payload.body.order_id)
+        logger.warning(
+            "Callback received for unknown order_id: %s", payload.body.order_id
+        )
     except Exception as e:
         logger.error("Error processing callback: %s", str(e), exc_info=True)
 
