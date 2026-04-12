@@ -29,11 +29,11 @@ const tinymceConfig = ({
             "/static/djangoeditorwidgets/tinymce/a2ა/main.css",
             "/static/djangoeditorwidgets/tinymce/comparisonslider/main.css",
             "/static/djangoeditorwidgets/tinymce/myquiz/main.css",
-            "/static/djangoeditorwidgets/tinymce/insert-Podcast/main.css"
+            "/static/djangoeditorwidgets/tinymce/insert-article/main.css"
         ],
         external_plugins: {
             insertArticle:
-                "/static/djangoeditorwidgets/tinymce/insert-Podcast/main.js",
+                "/static/djangoeditorwidgets/tinymce/insert-article/main.js",
             myquiz: "/static/djangoeditorwidgets/tinymce/myquiz/main.js",
             a2ა: "/static/djangoeditorwidgets/tinymce/a2ა/main.js",
             audioWidget:
