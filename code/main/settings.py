@@ -280,7 +280,6 @@ WEB_EDITOR_CONFIG = {
     "tinymce": {
         "js": [
             join(STATIC_URL, "tinymce/tinymce.min.js"),
-            join(STATIC_URL, "mmanager/mmanager.js"),
             join(STATIC_URL, "djangoeditorwidgets/tinymce/tinymce.config.js"),
             join(STATIC_URL, "djangoeditorwidgets/tinymce/tinymce.init.js"),
         ],
