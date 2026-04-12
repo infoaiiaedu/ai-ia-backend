@@ -26,3 +26,8 @@ const config = tinymceConfig({
 });
 
 tinymce.init(config);
+
+
+
+
+
