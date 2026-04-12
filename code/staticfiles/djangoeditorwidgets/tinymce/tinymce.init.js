@@ -1,4 +1,4 @@
-const media_manager_url = window.MEDIA_MANAGER_URL;
+const media_manager_url = window.MEDIA_MANAGER_URL || "/admin/mmanager/";
 
 const mm = new MManager({
     media_manager_url
